@@ -32,7 +32,23 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter Web
-        run: flutter build web --release --base-href /pLOCKet/
+        run: flutter build web --release --base-href /pLOCKet/ --dart-define=BUILD_VERSION=${{ github.run_number }}
+
+      - name: Add cache-busting to JS/CSS files
+        run: |
+          cd build/web
+          TIMESTAMP=$(date +%s)
+          # Renommer main.dart.js avec timestamp
+          if [ -f main.dart.js ]; then
+            mv main.dart.js main.dart.js?v=$TIMESTAMP
+          fi
+          # Renommer flutter.js avec timestamp
+          if [ -f flutter.js ]; then
+            mv flutter.js flutter.js?v=$TIMESTAMP
+          fi
+          # Mettre à jour les références dans index.html
+          sed -i "s/main.dart.js/main.dart.js?v=$TIMESTAMP/g" index.html
+          sed -i "s/flutter.js/flutter.js?v=$TIMESTAMP/g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
