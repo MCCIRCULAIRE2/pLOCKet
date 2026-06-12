@@ -1,4 +1,6 @@
 import '../models/analytical_field.dart';
+import '../models/user_profile.dart';
+import '../database/daos/user_profile_dao.dart';
 
 /// Moteur de relations sémantiques entre entités analytiques
 class SemanticRelationEngine {
@@ -41,11 +43,11 @@ class SemanticRelationEngine {
   };
 
   /// Trouve les entités correspondant à une requête sémantique
-  static List<AnalyticalValue> findEntitiesBySemanticQuery(
+  static Future<List<AnalyticalValue>> findEntitiesBySemanticQuery(
     String query,
     List<AnalyticalField> fields,
     List<AnalyticalValue> values,
-  ) {
+  ) async {
     final queryLower = query.toLowerCase();
     final results = <AnalyticalValue>[];
 
@@ -53,6 +55,28 @@ class SemanticRelationEngine {
     for (final entry in _semanticGroups.entries) {
       if (entry.value.any((alias) => queryLower.contains(alias))) {
         print('[SEMANTIC] Groupe sémantique détecté: ${entry.key}');
+        
+        // Si c'est "famille" ou "toute la famille", inclure l'utilisateur
+        if (entry.key == 'famille') {
+          print('[SEMANTIC] Inclusion de l\'utilisateur dans le groupe famille');
+          
+          // Charger le profil utilisateur
+          final userProfileDao = UserProfileDao();
+          final profile = await userProfileDao.getProfile();
+          
+          if (profile != null) {
+            final userName = _getUserName(profile);
+            if (userName != null) {
+              print('[SEMANTIC] Utilisateur: $userName');
+              // Créer une valeur virtuelle pour l'utilisateur
+              results.add(AnalyticalValue(
+                id: 'user_profile',
+                fieldId: 'personne',
+                label: userName,
+              ));
+            }
+          }
+        }
         
         // Trouver le champ correspondant
         final field = _findFieldByGroup(entry.key, fields);
@@ -119,6 +143,17 @@ class SemanticRelationEngine {
     return results;
   }
 
+  static String? _getUserName(UserProfile profile) {
+    if (profile.prenom != null && profile.nom != null) {
+      return '${profile.prenom} ${profile.nom}';
+    } else if (profile.prenom != null) {
+      return profile.prenom;
+    } else if (profile.nom != null) {
+      return profile.nom;
+    }
+    return null;
+  }
+
   /// Trouve un champ par nom
   static AnalyticalField? _findFieldByName(String name, List<AnalyticalField> fields) {
     return fields.firstWhere(
@@ -160,7 +195,7 @@ class SemanticRelationEngine {
     } else if (group == 'véhicules') {
       return values; // Tous les véhicules
     } else if (group == 'famille') {
-      return values; // Toute la famille
+      return values; // Toute la famille (utilisateur déjà ajouté)
     }
     return values;
   }
