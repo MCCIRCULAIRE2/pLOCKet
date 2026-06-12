@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../models/card_model.dart';
+import '../models/draft_card.dart';
+import '../models/typed_field.dart';
+import '../models/field_type.dart';
 import '../providers/card_provider.dart';
 import '../widgets/tag_chip.dart';
 import '../theme/app_colors.dart';
@@ -14,6 +17,7 @@ import '../platform/source_reader/source_reader_stub.dart'
     if (dart.library.io) '../platform/source_reader/source_reader_io.dart';
 import '../platform/blob_helper/blob_helper_stub.dart'
     if (dart.library.js_interop) '../platform/blob_helper/blob_helper_web.dart';
+import 'verification_screen.dart';
 
 class CardDetailScreen extends StatefulWidget {
   final String cardId;
@@ -117,6 +121,10 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
       appBar: AppBar(
         title: const Text('Détail fiche'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => _editCard(card),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             onPressed: () {
@@ -352,6 +360,83 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
           Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
         ],
       ),
+    );
+  }
+
+  Future<void> _editCard(CardModel card) async {
+    debugPrint('[EDIT] ═══════════════════════════════════════════════════════════');
+    debugPrint('[EDIT] Début édition fiche: ${card.id}');
+    debugPrint('[EDIT] Titre: ${card.title}');
+    debugPrint('[EDIT] ═══════════════════════════════════════════════════════════');
+    
+    // Convertir CardModel en DraftCard
+    final draft = _cardModelToDraftCard(card);
+    
+    debugPrint('[EDIT] DraftCard créé avec ${draft.fields.length} champ(s)');
+    debugPrint('[EDIT] Champs personnalisés: ${draft.customFields.length}');
+    debugPrint('[EDIT] Étiquettes: ${draft.tags.length}');
+    debugPrint('[EDIT] ═══════════════════════════════════════════════════════════');
+    
+    if (!mounted) return;
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VerificationScreen(
+          draft: draft,
+          existingCardId: card.id,
+        ),
+      ),
+    );
+  }
+
+  DraftCard _cardModelToDraftCard(CardModel card) {
+    // Convertir les champs de CardModel en TypedField
+    final fields = <String, TypedField>{};
+    final customFields = <String, TypedField>{};
+    
+    for (final entry in card.fields.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      
+      if (value is Map<String, dynamic>) {
+        // Format TypedField encodé
+        final rawValue = value['v']?.toString() ?? '';
+        final typeName = value['t']?.toString() ?? 'text';
+        final type = FieldType.values.firstWhere(
+          (t) => t.name == typeName,
+          orElse: () => FieldType.text,
+        );
+        final needsReview = value['nr'] as bool? ?? false;
+        final validatedByUser = value['vu'] as bool? ?? false;
+        
+        fields[key] = TypedField(
+          rawValue: rawValue,
+          type: type,
+          needsReview: needsReview,
+          validatedByUser: validatedByUser,
+        );
+      } else {
+        // Format legacy (string simple)
+        fields[key] = TypedField(
+          rawValue: value.toString(),
+          type: FieldType.text,
+        );
+      }
+    }
+    
+    return DraftCard(
+      title: card.title,
+      type: card.type,
+      subType: card.subType,
+      rawText: card.rawText,
+      value: card.value,
+      date: card.date,
+      filePath: card.filePath,
+      mimeType: card.mimeType,
+      fields: fields,
+      customFields: customFields,
+      tags: card.tags,
     );
   }
 

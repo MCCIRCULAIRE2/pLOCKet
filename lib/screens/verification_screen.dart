@@ -16,8 +16,13 @@ import '../theme/app_spacing.dart';
 
 class VerificationScreen extends StatefulWidget {
   final DraftCard draft;
+  final String? existingCardId;
 
-  const VerificationScreen({super.key, required this.draft});
+  const VerificationScreen({
+    super.key,
+    required this.draft,
+    this.existingCardId,
+  });
 
   @override
   State<VerificationScreen> createState() => _VerificationScreenState();
@@ -609,6 +614,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
     setState(() => _isSaving = true);
     _draft.title = _titleController.text.trim();
 
+    final isUpdate = widget.existingCardId != null;
+    debugPrint('[SAVE] Mode: ${isUpdate ? "MISE À JOUR" : "CRÉATION"}');
+    debugPrint('[SAVE] existingCardId: ${widget.existingCardId ?? "aucun"}');
     debugPrint('[SAVE] Sauvegarde fiche');
     debugPrint('[SAVE] Champs extraits: ${_draft.fields.length}');
     debugPrint('[SAVE] Champs personnalisés: ${_draft.customFields.length}');
@@ -618,7 +626,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
     debugPrint('[SAVE] Titre: ${_draft.title}');
 
     final provider = context.read<CardProvider>();
-    final card = await provider.finalizeCard(_draft);
+    final card = await provider.finalizeCard(_draft, existingCardId: widget.existingCardId);
 
     if (!mounted) return;
     setState(() => _isSaving = false);
@@ -627,7 +635,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
       debugPrint('[SAVE] Succès sauvegarde (id: ${card.id})');
       debugPrint('[SAVE] Fin sauvegarde');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fiche enregistrée avec succès')),
+        SnackBar(content: Text(isUpdate ? 'Fiche mise à jour avec succès' : 'Fiche enregistrée avec succès')),
       );
       Navigator.of(context).popUntil((route) => route.isFirst);
     } else {
@@ -669,10 +677,11 @@ class _VerificationScreenState extends State<VerificationScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isUpdate = widget.existingCardId != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vérification'),
+        title: Text(isUpdate ? 'Modifier la fiche' : 'Vérification'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: _cancel,
@@ -687,7 +696,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 icon: _isSaving
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.save_outlined, size: 18),
-                label: Text(_isSaving ? '...' : 'Enregistrer'),
+                label: Text(_isSaving ? '...' : (isUpdate ? 'Enregistrer les modifications' : 'Enregistrer')),
               ),
             ),
           ),

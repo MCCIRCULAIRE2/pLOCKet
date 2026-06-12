@@ -284,16 +284,19 @@ class CardProvider extends ChangeNotifier {
   }
 
   /// Save a DraftCard (after user validation) as a permanent CardModel.
-  Future<CardModel?> finalizeCard(DraftCard draft) async {
+  Future<CardModel?> finalizeCard(DraftCard draft, {String? existingCardId}) async {
     _error = null;
     try {
       debugPrint('[SAVE] ═══════════════════════════════════════════════════════════');
       debugPrint('[SAVE] Début sauvegarde fiche');
       debugPrint('[SAVE] ═══════════════════════════════════════════════════════════');
-      debugPrint('[SAVE] Génération UUIDs');
-      final cardId = _uuid.v4();
-      debugPrint('[SAVE] cardId = $cardId');
+      
+      final isUpdate = existingCardId != null;
+      final cardId = existingCardId ?? _uuid.v4();
       final docId = _uuid.v4();
+      
+      debugPrint('[SAVE] Mode: ${isUpdate ? "MISE À JOUR" : "CRÉATION"}');
+      debugPrint('[SAVE] cardId = $cardId');
       debugPrint('[SAVE] docId = $docId');
 
       final allFields = {
@@ -317,6 +320,19 @@ class CardProvider extends ChangeNotifier {
       final sourceData = rawBytes != null ? base64Encode(rawBytes) : null;
       debugPrint('[SAVE] sourceData length = ${sourceData?.length ?? 0}');
       debugPrint('[SAVE] bytes length = ${rawBytes?.length ?? 0}');
+      
+      // Pour une mise à jour, récupérer l'ancienne fiche pour conserver le sourceDocumentId
+      String? sourceDocumentId;
+      if (isUpdate) {
+        final existingCard = await _cardDao.getById(existingCardId);
+        if (existingCard != null) {
+          sourceDocumentId = existingCard.sourceDocumentId;
+          debugPrint('[SAVE] Conservation du document source: $sourceDocumentId');
+        }
+      } else {
+        sourceDocumentId = draft.filePath != null ? docId : null;
+      }
+      
       final card = CardModel(
         id: cardId,
         title: draft.title,
@@ -329,12 +345,19 @@ class CardProvider extends ChangeNotifier {
         tags: List<String>.from(draft.tags),
         filePath: draft.filePath,
         mimeType: draft.mimeType,
-        sourceDocumentId: draft.filePath != null ? docId : null,
+        sourceDocumentId: sourceDocumentId,
       );
-      await _cardDao.insert(card);
-      debugPrint('[SAVE] ✓ Fiche insérée en base de données');
+      
+      if (isUpdate) {
+        await _cardDao.update(card);
+        debugPrint('[SAVE] ✓ Fiche mise à jour en base de données');
+      } else {
+        await _cardDao.insert(card);
+        debugPrint('[SAVE] ✓ Fiche insérée en base de données');
+      }
 
-      if (draft.filePath != null) {
+      // Sauvegarder le document lié seulement si c'est une nouvelle fiche
+      if (!isUpdate && draft.filePath != null) {
         debugPrint('[SAVE] Sauvegarde document lié ($docId)');
         final doc = Document(
           id: docId,
