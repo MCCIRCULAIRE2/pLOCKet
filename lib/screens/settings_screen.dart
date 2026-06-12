@@ -7,6 +7,7 @@ import '../providers/analytical_field_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/adaptive_dialog.dart';
 import 'ocr_comparison_test.dart';
 import 'debug_storage_screen.dart';
 
@@ -30,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Paramètres')),
+      resizeToAvoidBottomInset: false,
       body: Consumer<AnalyticalFieldProvider>(
         builder: (context, provider, _) {
           if (provider.isLoading) {
@@ -125,35 +127,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showCreateFieldDialog(
       BuildContext context, AnalyticalFieldProvider provider) {
     final controller = TextEditingController();
-    showDialog(
+    showAdaptiveModalDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nouveau champ analytique'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Nom du champ',
-            hintText: 'Ex: Personne, Logement, Véhicule...',
-          ),
-          autofocus: true,
+      title: 'Nouveau champ analytique',
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          labelText: 'Nom du champ',
+          hintText: 'Ex: Personne, Logement, Véhicule...',
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                provider.createField(name: name);
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Créer'),
-          ),
-        ],
+        autofocus: true,
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final name = controller.text.trim();
+            if (name.isNotEmpty) {
+              provider.createField(name: name);
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Créer'),
+        ),
+      ],
     );
   }
 }
@@ -225,58 +225,54 @@ class _FieldCard extends StatelessWidget {
   void _showRenameDialog(
       BuildContext context, AnalyticalFieldProvider provider) {
     final controller = TextEditingController(text: field.name);
-    showDialog(
+    showAdaptiveModalDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Renommer le champ'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                provider.renameField(field, name);
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Renommer'),
-          ),
-        ],
+      title: 'Renommer le champ',
+      content: TextField(
+        controller: controller,
+        autofocus: true,
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final name = controller.text.trim();
+            if (name.isNotEmpty) {
+              provider.renameField(field, name);
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Renommer'),
+        ),
+      ],
     );
   }
 
   void _confirmDelete(
       BuildContext context, AnalyticalFieldProvider provider) {
-    showDialog(
+    showAdaptiveModalDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer le champ ?'),
-        content: Text(
-            'Supprimer "${field.name}" effacera aussi toutes ses valeurs.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () {
-              provider.deleteField(field.id);
-              Navigator.pop(ctx);
-            },
-            style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentRed),
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
+      title: 'Supprimer le champ ?',
+      content: Text(
+          'Supprimer "${field.name}" effacera aussi toutes ses valeurs.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            provider.deleteField(field.id);
+            Navigator.pop(context);
+          },
+          style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accentRed),
+          child: const Text('Supprimer'),
+        ),
+      ],
     );
   }
 
@@ -286,96 +282,94 @@ class _FieldCard extends StatelessWidget {
     final aliasController = TextEditingController();
     final aliases = <String>[];
 
-    showDialog(
+    showAdaptiveModalDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      title: 'Ajouter une valeur à "${field.name}"',
+      content: StatefulBuilder(
         builder: (ctx, setDialogState) {
-          return AlertDialog(
-            title: Text('Ajouter une valeur à "${field.name}"'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: labelController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nom principal',
-                      hintText: 'Ex: Maison Saint-Girons',
-                    ),
-                    autofocus: true,
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: labelController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nom principal',
+                    hintText: 'Ex: Maison Saint-Girons',
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: aliasController,
-                          decoration: const InputDecoration(
-                            labelText: 'Alias',
-                            hintText: 'Ex: Maison de vacances',
-                          ),
-                          onSubmitted: (v) {
-                            if (v.trim().isNotEmpty) {
-                              setDialogState(
-                                  () => aliases.add(v.trim()));
-                              aliasController.clear();
-                            }
-                          },
+                  autofocus: true,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: aliasController,
+                        decoration: const InputDecoration(
+                          labelText: 'Alias',
+                          hintText: 'Ex: Maison de vacances',
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: () {
-                          final v = aliasController.text.trim();
-                          if (v.isNotEmpty) {
-                            setDialogState(() => aliases.add(v));
+                        onSubmitted: (v) {
+                          if (v.trim().isNotEmpty) {
+                            setDialogState(
+                                () => aliases.add(v.trim()));
                             aliasController.clear();
                           }
                         },
                       ),
-                    ],
-                  ),
-                  if (aliases.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    Wrap(
-                      spacing: AppSpacing.xs,
-                      runSpacing: AppSpacing.xs,
-                      children: aliases
-                          .map((a) => Chip(
-                                label: Text(a, style: const TextStyle(fontSize: 12)),
-                                onDeleted: () => setDialogState(
-                                    () => aliases.remove(a)),
-                                visualDensity: VisualDensity.compact,
-                              ))
-                          .toList(),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () {
+                        final v = aliasController.text.trim();
+                        if (v.isNotEmpty) {
+                          setDialogState(() => aliases.add(v));
+                          aliasController.clear();
+                        }
+                      },
                     ),
                   ],
+                ),
+                if (aliases.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: aliases
+                        .map((a) => Chip(
+                              label: Text(a, style: const TextStyle(fontSize: 12)),
+                              onDeleted: () => setDialogState(
+                                  () => aliases.remove(a)),
+                              visualDensity: VisualDensity.compact,
+                            ))
+                        .toList(),
+                  ),
                 ],
-              ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annuler'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final label = labelController.text.trim();
-                  if (label.isNotEmpty) {
-                    provider.addValue(
-                      fieldId: field.id,
-                      label: label,
-                      aliases: aliases,
-                    );
-                    Navigator.pop(ctx);
-                  }
-                },
-                child: const Text('Ajouter'),
-              ),
-            ],
           );
         },
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final label = labelController.text.trim();
+            if (label.isNotEmpty) {
+              provider.addValue(
+                fieldId: field.id,
+                label: label,
+                aliases: aliases,
+              );
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Ajouter'),
+        ),
+      ],
     );
   }
 }
@@ -458,42 +452,40 @@ class _ValueChip extends StatelessWidget {
   void _showRenameValueDialog(
       BuildContext context, AnalyticalFieldProvider provider) {
     final controller = TextEditingController(text: value.label);
-    showDialog(
+    showAdaptiveModalDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Renommer la valeur'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(controller: controller, autofocus: true),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Toutes les fiches liées seront mises à jour automatiquement.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.textTertiary),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final label = controller.text.trim();
-              if (label.isNotEmpty) {
-                provider.renameValue(value, label);
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Renommer'),
+      title: 'Renommer la valeur',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(controller: controller, autofocus: true),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Toutes les fiches liées seront mises à jour automatiquement.',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.textTertiary),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final label = controller.text.trim();
+            if (label.isNotEmpty) {
+              provider.renameValue(value, label);
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Renommer'),
+        ),
+      ],
     );
   }
 
@@ -502,12 +494,12 @@ class _ValueChip extends StatelessWidget {
     final aliasController = TextEditingController();
     final currentAliases = List<String>.from(value.aliases);
 
-    showDialog(
+    showAdaptiveModalDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Alias de "${value.label}"'),
-          content: SizedBox(
+      title: 'Alias de "${value.label}"',
+      content: StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return SizedBox(
             width: double.maxFinite,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -553,23 +545,23 @@ class _ValueChip extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () {
-                provider.updateValue(
-                    value.copyWith(aliases: currentAliases));
-                Navigator.pop(ctx);
-              },
-              child: const Text('Enregistrer'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            provider.updateValue(
+                value.copyWith(aliases: currentAliases));
+            Navigator.pop(context);
+          },
+          child: const Text('Enregistrer'),
+        ),
+      ],
     );
   }
 }

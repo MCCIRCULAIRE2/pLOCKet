@@ -95,9 +95,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                 icon: const Icon(Icons.edit),
                 onPressed: () => _showEditDialog(doc),
               ),
-            ],
-          ),
-          body: ListView(
+          ],
+        ),
+        resizeToAvoidBottomInset: false,
+        body: ListView(
             padding: AppSpacing.screenPadding,
             children: [
               Text(doc.title, style: theme.textTheme.headlineSmall),

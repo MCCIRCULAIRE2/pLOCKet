@@ -693,6 +693,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
           ),
         ],
       ),
+      resizeToAvoidBottomInset: false,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth > 900;

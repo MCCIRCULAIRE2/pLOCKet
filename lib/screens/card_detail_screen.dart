@@ -145,6 +145,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
           ),
         ],
       ),
+      resizeToAvoidBottomInset: false,
       body: ListView(
         padding: AppSpacing.screenPadding,
         children: [
