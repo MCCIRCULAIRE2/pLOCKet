@@ -4,6 +4,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../models/card_model.dart';
 import '../ai/extraction_candidate.dart';
 import '../ai/field_format_validator.dart';
+import '../ai/contextual_suggestion_engine.dart';
 import '../models/draft_card.dart';
 import '../models/field_type.dart';
 import '../models/typed_field.dart';
@@ -142,10 +143,18 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
     // Stocker les suggestions pour affichage ultérieur
     if (suggestions.isNotEmpty) {
+      // Générer des suggestions contextuelles
+      final contextualSuggestions = ContextualSuggestionEngine.generateSuggestions(
+        text: text,
+        extractedFields: _draft.fields.map((key, field) => MapEntry(key, field.rawValue)),
+        analyticalFields: afProvider.fields,
+        analyticalValues: afProvider.allValues,
+      );
+      
       setState(() {
-        _draft.suggestedFields = suggestions.keys.toList();
+        _draft.contextualSuggestions = contextualSuggestions;
       });
-      debugPrint('[AUTO-DETECT] ${suggestions.length} suggestion(s) ajoutée(s)');
+      debugPrint('[AUTO-DETECT] ${contextualSuggestions.length} suggestion(s) contextuelle(s) ajoutée(s)');
     }
 
     if (hasChanges) {
@@ -910,7 +919,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
       ],
 
       // ── Suggested Fields ──
-      if (_draft.suggestedFields.isNotEmpty) ...[
+      if (_draft.contextualSuggestions.isNotEmpty) ...[
         _buildSuggestedFieldsSection(theme),
         const SizedBox(height: AppSpacing.xxl),
       ],
@@ -1301,22 +1310,34 @@ class _VerificationScreenState extends State<VerificationScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          ..._draft.suggestedFields.map((field) => Padding(
+          ..._draft.contextualSuggestions.map((suggestion) => Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Row(
               children: [
                 Icon(Icons.add_circle_outline, size: 16, color: AppColors.accentOrange),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text(
-                    field,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        suggestion.fieldLabel,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Confiance : ${suggestion.confidence}% — ${suggestion.reason}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: () => _addSuggestedField(field),
+                  onPressed: () => _addSuggestedField(suggestion),
                   icon: const Icon(Icons.add, size: 14),
                   label: const Text('Ajouter'),
                   style: TextButton.styleFrom(
@@ -1332,16 +1353,16 @@ class _VerificationScreenState extends State<VerificationScreen> {
     );
   }
 
-  void _addSuggestedField(String fieldName) {
-    final controller = TextEditingController();
+  void _addSuggestedField(ContextualSuggestion suggestion) {
+    final controller = TextEditingController(text: suggestion.suggestedValue ?? '');
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Ajouter $fieldName'),
+        title: Text('Ajouter ${suggestion.fieldLabel}'),
         content: TextField(
           controller: controller,
           decoration: InputDecoration(
-            labelText: 'Valeur de $fieldName',
+            labelText: 'Valeur de ${suggestion.fieldLabel}',
             hintText: 'Saisissez la valeur...',
           ),
           autofocus: true,
@@ -1356,11 +1377,11 @@ class _VerificationScreenState extends State<VerificationScreen> {
               final value = controller.text.trim();
               if (value.isNotEmpty) {
                 setState(() {
-                  _draft.customFields[fieldName] = TypedField(
+                  _draft.customFields[suggestion.fieldKey] = TypedField(
                     rawValue: value,
                     type: FieldType.text,
                   );
-                  _draft.suggestedFields.remove(fieldName);
+                  _draft.contextualSuggestions.remove(suggestion);
                   _draft.validate();
                 });
               }

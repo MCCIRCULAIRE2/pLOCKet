@@ -1,5 +1,6 @@
 import '../models/card_model.dart';
 import 'extraction_candidate.dart';
+import 'contextual_suggestion_engine.dart';
 
 class AnalysisResult {
   final CardType type;
@@ -11,7 +12,7 @@ class AnalysisResult {
   final List<String> tags;
   final List<ExtractionCandidate> candidates;
   final Map<String, String> detectedEntities;
-  final List<String> suggestedFields;
+  final List<ContextualSuggestion> contextualSuggestions;
 
   AnalysisResult({
     required this.type,
@@ -23,7 +24,7 @@ class AnalysisResult {
     this.tags = const [],
     this.candidates = const [],
     this.detectedEntities = const {},
-    this.suggestedFields = const [],
+    this.contextualSuggestions = const [],
   });
 }
 

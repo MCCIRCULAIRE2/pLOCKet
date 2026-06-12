@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../ai/extraction_candidate.dart';
+import '../ai/contextual_suggestion_engine.dart';
 import 'card_model.dart';
 import 'field_type.dart';
 import 'typed_field.dart';
@@ -33,7 +34,7 @@ class DraftCard {
   Map<String, TypedField> customFields;
   List<String> tags;
   List<ValidationWarning> warnings;
-  List<String> suggestedFields;
+  List<ContextualSuggestion> contextualSuggestions;
   final DateTime createdAt;
 
   final String? sourceFileName;
@@ -58,12 +59,12 @@ class DraftCard {
     this.sourceBytes,
     List<ValidationWarning>? warnings,
     this.candidates = const [],
-    List<String>? suggestedFields,
+    List<ContextualSuggestion>? contextualSuggestions,
   })  : fields = fields ?? {},
         customFields = customFields ?? {},
         tags = tags ?? [],
         warnings = warnings ?? [],
-        suggestedFields = suggestedFields ?? [],
+        contextualSuggestions = contextualSuggestions ?? [],
         createdAt = DateTime.now();
 
   /// Legacy constructor for backward compat — auto-detects types.
@@ -84,7 +85,7 @@ class DraftCard {
     this.sourceBytes,
     List<ValidationWarning>? warnings,
     this.candidates = const [],
-    List<String>? suggestedFields,
+    List<ContextualSuggestion>? contextualSuggestions,
   })  : fields = legacyFields != null
             ? TypedField.fromLegacyMap(legacyFields)
             : {},
@@ -93,7 +94,7 @@ class DraftCard {
             : {},
         tags = tags ?? [],
         warnings = warnings ?? [],
-        suggestedFields = suggestedFields ?? [],
+        contextualSuggestions = contextualSuggestions ?? [],
         createdAt = DateTime.now();
 
   int get fieldCount => fields.length;

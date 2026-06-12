@@ -7,6 +7,7 @@ import '../models/draft_card.dart';
 import '../models/typed_field.dart';
 import '../ai/ai_service.dart';
 import '../ai/fallback_ai_service.dart';
+import '../ai/contextual_suggestion_engine.dart';
 import '../services/content_pipeline.dart';
 import '../services/qa_engine.dart';
 import '../database/daos/card_dao.dart';
@@ -178,7 +179,7 @@ class CardProvider extends ChangeNotifier {
         sourceFileExtension: sourceFileExtension,
         sourceBytes: sourceBytes,
         candidates: analysis.candidates,
-        suggestedFields: List<String>.from(analysis.suggestedFields),
+        contextualSuggestions: List<ContextualSuggestion>.from(analysis.contextualSuggestions),
       );
       
       debugPrint('[ANALYZE] ─── Validation des champs ───');
@@ -193,8 +194,11 @@ class CardProvider extends ChangeNotifier {
       
       debugPrint('[ANALYZE] ═══════════════════════════════════════════════════════════');
       debugPrint('[ANALYZE] Fin analyse — ${typedFields.length} champ(s) dans le brouillon');
-      if (draft.suggestedFields.isNotEmpty) {
-        debugPrint('[ANALYZE] Champs suggérés: ${draft.suggestedFields.join(", ")}');
+      if (draft.contextualSuggestions.isNotEmpty) {
+        debugPrint('[ANALYZE] Suggestions contextuelles: ${draft.contextualSuggestions.length}');
+        for (final suggestion in draft.contextualSuggestions) {
+          debugPrint('[ANALYZE]   ⚠ ${suggestion.fieldLabel} (confiance: ${suggestion.confidence}%, raison: ${suggestion.reason})');
+        }
       }
       debugPrint('[ANALYZE] ═══════════════════════════════════════════════════════════');
       
@@ -259,7 +263,7 @@ class CardProvider extends ChangeNotifier {
         sourceFileExtension: sourceFileExtension,
         sourceBytes: safeBytes,
         candidates: analysis.candidates,
-        suggestedFields: List<String>.from(analysis.suggestedFields),
+        contextualSuggestions: List<ContextualSuggestion>.from(analysis.contextualSuggestions),
       );
       draft.validate();
       debugPrint('[ANALYZE] ✓ Validation terminée — ${draft.warnings.length} avertissement(s)');
@@ -269,8 +273,11 @@ class CardProvider extends ChangeNotifier {
       
       debugPrint('[ANALYZE] ═══════════════════════════════════════════════════════════');
       debugPrint('[ANALYZE] Fin analyse — ${typedFields.length} champ(s) dans le brouillon');
-      if (draft.suggestedFields.isNotEmpty) {
-        debugPrint('[ANALYZE] Champs suggérés: ${draft.suggestedFields.join(", ")}');
+      if (draft.contextualSuggestions.isNotEmpty) {
+        debugPrint('[ANALYZE] Suggestions contextuelles: ${draft.contextualSuggestions.length}');
+        for (final suggestion in draft.contextualSuggestions) {
+          debugPrint('[ANALYZE]   ⚠ ${suggestion.fieldLabel} (confiance: ${suggestion.confidence}%, raison: ${suggestion.reason})');
+        }
       }
       debugPrint('[ANALYZE] ═══════════════════════════════════════════════════════════');
       

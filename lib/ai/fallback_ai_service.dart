@@ -2,6 +2,7 @@ import '../models/card_model.dart';
 import '../services/question_analyzer.dart';
 import 'ai_service.dart';
 import 'extraction_candidate.dart';
+import 'contextual_suggestion_engine.dart';
 
 class _Address {
   final String street;
@@ -154,18 +155,28 @@ class FallbackAIService implements AIService {
     final date = _extractDate(rawText);
     final vehicle = _extractVehicle(rawText);
     final fields = <String, dynamic>{};
-    final suggestedFields = <String>[];
+    final contextualSuggestions = <ContextualSuggestion>[];
 
     if (vehicle != null) {
       fields['Véhicule'] = vehicle;
     } else if (_isVehicleEvent(subType)) {
-      suggestedFields.add('Véhicule');
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Véhicule',
+        fieldLabel: 'Véhicule',
+        confidence: 70,
+        reason: 'Véhicule non identifié',
+      ));
     }
 
     if (date != null) {
       fields['Date'] = _formatDate(date);
     } else {
-      suggestedFields.add('Date');
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Date',
+        fieldLabel: 'Date',
+        confidence: 60,
+        reason: 'Date non spécifiée',
+      ));
     }
 
     if (subType == 'nouveau_contrat') {
@@ -173,14 +184,24 @@ class FallbackAIService implements AIService {
       if (assureur != null) {
         fields['Assureur'] = assureur;
       } else {
-        suggestedFields.add('Assureur');
+        contextualSuggestions.add(ContextualSuggestion(
+          fieldKey: 'Assureur',
+          fieldLabel: 'Assureur',
+          confidence: 70,
+          reason: 'Assureur non identifié',
+        ));
       }
       
       final typeContrat = _extractAfter(rawText, ['contrat', 'assurance']);
       if (typeContrat != null) {
         fields['Type de contrat'] = typeContrat;
       } else {
-        suggestedFields.add('Type de contrat');
+        contextualSuggestions.add(ContextualSuggestion(
+          fieldKey: 'Type de contrat',
+          fieldLabel: 'Type de contrat',
+          confidence: 70,
+          reason: 'Type de contrat non spécifié',
+        ));
       }
     }
 
@@ -188,8 +209,18 @@ class FallbackAIService implements AIService {
       fields['Description'] = rawText.length > 80
           ? '${rawText.substring(0, 80)}...'
           : rawText;
-      suggestedFields.add('Lieu');
-      suggestedFields.add('Tiers impliqué');
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Lieu',
+        fieldLabel: 'Lieu',
+        confidence: 60,
+        reason: 'Lieu non spécifié',
+      ));
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Tiers impliqué',
+        fieldLabel: 'Tiers impliqué',
+        confidence: 60,
+        reason: 'Tiers non identifié',
+      ));
     }
 
     if (subType == 'achat_vehicule' || subType == 'vente_vehicule') {
@@ -197,31 +228,54 @@ class FallbackAIService implements AIService {
       if (montant != null) {
         fields['Montant'] = montant;
       } else {
-        suggestedFields.add('Montant');
+        contextualSuggestions.add(ContextualSuggestion(
+          fieldKey: 'Montant',
+          fieldLabel: 'Montant',
+          confidence: 70,
+          reason: 'Montant non spécifié',
+        ));
       }
       
       if (vehicle == null) {
-        suggestedFields.add('Immatriculation');
+        contextualSuggestions.add(ContextualSuggestion(
+          fieldKey: 'Immatriculation',
+          fieldLabel: 'Immatriculation',
+          confidence: 70,
+          reason: 'Immatriculation non spécifiée',
+        ));
       }
     }
 
     if (subType == 'controle_technique' || subType == 'revision') {
       if (vehicle == null) {
-        suggestedFields.add('Immatriculation');
+        contextualSuggestions.add(ContextualSuggestion(
+          fieldKey: 'Immatriculation',
+          fieldLabel: 'Immatriculation',
+          confidence: 70,
+          reason: 'Immatriculation non spécifiée',
+        ));
       }
-      suggestedFields.add('Kilométrage');
-      suggestedFields.add('Centre/Garage');
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Kilométrage',
+        fieldLabel: 'Kilométrage',
+        confidence: 70,
+        reason: 'Kilométrage non spécifié',
+      ));
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Centre/Garage',
+        fieldLabel: 'Centre/Garage',
+        confidence: 70,
+        reason: 'Centre non identifié',
+      ));
       
       final km = _extractKilometrage(rawText);
       if (km != null) {
         fields['Kilométrage'] = km;
-        suggestedFields.remove('Kilométrage');
       }
       
       final centre = _extractAfter(rawText, ['chez', 'au garage', 'centre', 'garage']);
       if (centre != null) {
         fields['Centre/Garage'] = centre;
-        suggestedFields.remove('Centre/Garage');
       }
     }
 
@@ -230,8 +284,18 @@ class FallbackAIService implements AIService {
               rawText.toLowerCase().contains('emmenagement')
           ? 'Emménagement'
           : 'Déménagement';
-      suggestedFields.add('Ancienne adresse');
-      suggestedFields.add('Nouvelle adresse');
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Ancienne adresse',
+        fieldLabel: 'Ancienne adresse',
+        confidence: 70,
+        reason: 'Ancienne adresse non spécifiée',
+      ));
+      contextualSuggestions.add(ContextualSuggestion(
+        fieldKey: 'Nouvelle adresse',
+        fieldLabel: 'Nouvelle adresse',
+        confidence: 70,
+        reason: 'Nouvelle adresse non spécifiée',
+      ));
     }
 
     final tags = <String>['événement', _subTypeLabels[subType]?.toLowerCase() ?? subType];
@@ -244,9 +308,9 @@ class FallbackAIService implements AIService {
     for (final entry in fields.entries) {
       print('[EVENT]   ✓ ${entry.key} = ${entry.value}');
     }
-    print('[EVENT] Champs suggérés: ${suggestedFields.length}');
-    for (final field in suggestedFields) {
-      print('[EVENT]   ⚠ $field (valeur non détectée)');
+    print('[EVENT] Suggestions contextuelles: ${contextualSuggestions.length}');
+    for (final suggestion in contextualSuggestions) {
+      print('[EVENT]   ⚠ ${suggestion.fieldLabel} (confiance: ${suggestion.confidence}%, raison: ${suggestion.reason})');
     }
     print('[EVENT] ═══════════════════════════════════════════════════════════');
 
@@ -257,7 +321,7 @@ class FallbackAIService implements AIService {
       date: date,
       fields: fields,
       tags: tags.toSet().toList(),
-      suggestedFields: suggestedFields,
+      contextualSuggestions: contextualSuggestions,
     );
   }
 
