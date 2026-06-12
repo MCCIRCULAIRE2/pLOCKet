@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../models/card_model.dart';
 import '../ai/extraction_candidate.dart';
+import '../ai/field_format_validator.dart';
 import '../models/draft_card.dart';
 import '../models/field_type.dart';
 import '../models/typed_field.dart';
@@ -60,42 +61,91 @@ class _VerificationScreenState extends State<VerificationScreen> {
     debugPrint('[AUTO-DETECT] ═══════════════════════════════════════════════════════════');
 
     bool hasChanges = false;
+    final suggestions = <String, String>{};
 
+    // Détection des entités analytiques
     final entityMatches = afProvider.findMatches(text);
     for (final match in entityMatches) {
       final fieldName = match.field.name;
       if (!_draft.fields.containsKey(fieldName) &&
           !_draft.customFields.containsKey(fieldName)) {
-        setState(() {
-          _draft.fields[fieldName] = TypedField(
-            rawValue: match.value.label,
-            type: FieldType.text,
-            validatedByUser: false,
-            needsReview: match.confidence < 90,
-          );
-        });
-        hasChanges = true;
-        debugPrint('[AUTO-DETECT] ✓ Ajout automatique: $fieldName = ${match.value.label}');
+        
+        // Ne remplir automatiquement que si confiance >= 90%
+        if (match.confidence >= 90) {
+          setState(() {
+            _draft.fields[fieldName] = TypedField(
+              rawValue: match.value.label,
+              type: FieldType.text,
+              validatedByUser: false,
+              needsReview: false,
+            );
+          });
+          hasChanges = true;
+          debugPrint('[AUTO-DETECT] ✓ Ajout automatique: $fieldName = ${match.value.label} (confiance: ${match.confidence}%)');
+        } else if (match.confidence >= 60) {
+          // Ajouter comme suggestion si confiance entre 60% et 90%
+          suggestions[fieldName] = match.value.label;
+          debugPrint('[AUTO-DETECT] ⚠ Suggestion: $fieldName = ${match.value.label} (confiance: ${match.confidence}%)');
+        } else {
+          debugPrint('[AUTO-DETECT] ✗ Ignoré: $fieldName (confiance: ${match.confidence}% < 60%)');
+        }
       }
     }
 
+    // Détection des identifiants avec validation de format
     final identifiers = afProvider.detectIdentifiers(text);
     for (final entry in identifiers.entries) {
       if (!_draft.fields.containsKey(entry.key)) {
         final fieldType = entry.key == 'numero_securite_sociale'
             ? FieldType.socialSecurityNumber
             : FieldType.identifier;
-        setState(() {
-          _draft.fields[entry.key] = TypedField(
-            rawValue: entry.value,
-            type: fieldType,
-            validatedByUser: false,
-            needsReview: true,
-          );
-        });
-        hasChanges = true;
-        debugPrint('[AUTO-DETECT] ✓ Ajout identifiant: ${entry.key} = ${entry.value}');
+        
+        // Valider le format
+        ValidationResult? validation;
+        switch (entry.key) {
+          case 'numero_securite_sociale':
+            validation = FieldFormatValidator.validateSSN(entry.value);
+            break;
+          case 'numero_contrat':
+            validation = FieldFormatValidator.validateContractNumber(entry.value);
+            break;
+          case 'numero_permis':
+            validation = FieldFormatValidator.validateContractNumber(entry.value);
+            break;
+          default:
+            validation = ValidationResult(isValid: true, confidence: 85, reason: 'Format non validé');
+        }
+        
+        debugPrint('[AUTO-DETECT] Validation ${entry.key}: ${validation.isValid} (confiance: ${validation.confidence}%, raison: ${validation.reason})');
+        
+        // Ne remplir automatiquement que si confiance >= 90%
+        if (validation.confidence >= 90) {
+          setState(() {
+            _draft.fields[entry.key] = TypedField(
+              rawValue: entry.value,
+              type: fieldType,
+              validatedByUser: false,
+              needsReview: false,
+            );
+          });
+          hasChanges = true;
+          debugPrint('[AUTO-DETECT] ✓ Ajout automatique: ${entry.key} = ${entry.value}');
+        } else if (validation.confidence >= 60) {
+          // Ajouter comme suggestion si confiance entre 60% et 90%
+          suggestions[entry.key] = entry.value;
+          debugPrint('[AUTO-DETECT] ⚠ Suggestion: ${entry.key} = ${entry.value} (confiance: ${validation.confidence}%)');
+        } else {
+          debugPrint('[AUTO-DETECT] ✗ Ignoré: ${entry.key} (confiance: ${validation.confidence}% < 60%)');
+        }
       }
+    }
+
+    // Stocker les suggestions pour affichage ultérieur
+    if (suggestions.isNotEmpty) {
+      setState(() {
+        _draft.suggestedFields = suggestions.keys.toList();
+      });
+      debugPrint('[AUTO-DETECT] ${suggestions.length} suggestion(s) ajoutée(s)');
     }
 
     if (hasChanges) {
