@@ -5,6 +5,7 @@ import '../providers/analytical_field_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/glass_card.dart';
+import 'ocr_comparison_test.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -34,6 +35,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return ListView(
             padding: AppSpacing.screenPadding,
             children: [
+              // Section Diagnostic
+              GlassSectionHeader(title: 'Diagnostic'),
+              const SizedBox(height: AppSpacing.md),
+              GlassCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.compare_arrows),
+                      title: const Text('Test comparatif OCR'),
+                      subtitle: const Text('Comparer Import vs Scanner sur la même image'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const OcrComparisonTest(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
+              
+              // Section Champs analytiques
               GlassSectionHeader(
                 title: 'Champs analytiques',
                 trailing: TextButton.icon(

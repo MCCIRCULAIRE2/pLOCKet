@@ -1934,22 +1934,24 @@ class FallbackAIService implements AIService {
   Map<String, String?>? _extractNomPrenom(String text) {
     final results = <String, String?>{};
     
-    // Pattern 1: "nom: XXX" ou "nom XXX"
+    // Pattern 1: "nom: XXX" ou "nom XXX" (avec ou sans deux-points)
     final nomMatch = RegExp(
       r'(?:nom|name)[:\s]+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)',
       caseSensitive: false,
     ).firstMatch(text);
     if (nomMatch != null) {
       results['nom'] = nomMatch.group(1)!.trim();
+      print('[EXTRACT] nom trouvé via pattern "nom:": ${results['nom']}');
     }
     
-    // Pattern 2: "prenom: XXX" ou "prenom XXX" ou "prénom XXX"
+    // Pattern 2: "prenom: XXX" ou "prenom XXX" ou "prénom XXX" (avec ou sans deux-points)
     final prenomMatch = RegExp(
       r'(?:pr[ée]nom|firstname)[:\s]+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)',
       caseSensitive: false,
     ).firstMatch(text);
     if (prenomMatch != null) {
       results['prenom'] = prenomMatch.group(1)!.trim();
+      print('[EXTRACT] prenom trouvé via pattern "prenom:": ${results['prenom']}');
     }
     
     // Pattern 3: "M. XXX YYY" ou "Mme XXX YYY"
@@ -1961,6 +1963,30 @@ class FallbackAIService implements AIService {
       if (civiliteMatch != null) {
         results['prenom'] = civiliteMatch.group(1)!.trim();
         results['nom'] = civiliteMatch.group(2)!.trim();
+        print('[EXTRACT] nom/prenom trouvés via pattern "M./Mme": ${results['prenom']} ${results['nom']}');
+      }
+    }
+    
+    // Pattern 4: Extraction directe "nom XXX prenom YYY" ou "prenom XXX nom YYY"
+    if (results['nom'] == null) {
+      final directNomMatch = RegExp(
+        r'\bnom\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)\b',
+        caseSensitive: false,
+      ).firstMatch(text);
+      if (directNomMatch != null) {
+        results['nom'] = directNomMatch.group(1)!.trim();
+        print('[EXTRACT] nom trouvé via pattern direct "nom XXX": ${results['nom']}');
+      }
+    }
+    
+    if (results['prenom'] == null) {
+      final directPrenomMatch = RegExp(
+        r'\bpr[ée]nom\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)\b',
+        caseSensitive: false,
+      ).firstMatch(text);
+      if (directPrenomMatch != null) {
+        results['prenom'] = directPrenomMatch.group(1)!.trim();
+        print('[EXTRACT] prenom trouvé via pattern direct "prenom XXX": ${results['prenom']}');
       }
     }
     
@@ -1976,7 +2002,9 @@ class FallbackAIService implements AIService {
     ).firstMatch(text);
     if (labelMatch != null) {
       final raw = labelMatch.group(1)!;
-      return _normalizePhone(raw);
+      final normalized = _normalizePhone(raw);
+      print('[EXTRACT] telephone trouvé via pattern "tel:": $normalized');
+      return normalized;
     }
     
     // Pattern 2: Numéro français avec parenthèses "(0X XX XX XX XX)"
@@ -1984,15 +2012,29 @@ class FallbackAIService implements AIService {
       r'\((0[1-9])(?:[\s.-]?(\d{2})){4}\)',
     ).firstMatch(text);
     if (parenMatch != null) {
-      return _normalizePhone(parenMatch.group(0)!);
+      final normalized = _normalizePhone(parenMatch.group(0)!);
+      print('[EXTRACT] telephone trouvé via pattern parenthèses: $normalized');
+      return normalized;
     }
     
-    // Pattern 3: Numéro français standard "0X XX XX XX XX"
+    // Pattern 3: Numéro français standard "0X XX XX XX XX" (avec séparateurs)
     final standardMatch = RegExp(
       r'\b(0[1-9])(?:[\s.-]?\d{2}){4}\b',
     ).firstMatch(text);
     if (standardMatch != null) {
-      return _normalizePhone(standardMatch.group(0)!);
+      final normalized = _normalizePhone(standardMatch.group(0)!);
+      print('[EXTRACT] telephone trouvé via pattern standard: $normalized');
+      return normalized;
+    }
+    
+    // Pattern 4: Numéro français compact "0XXXXXXXXX" (10 chiffres sans séparateurs)
+    final compactMatch = RegExp(
+      r'\b(0[1-9]\d{8})\b',
+    ).firstMatch(text);
+    if (compactMatch != null) {
+      final normalized = _normalizePhone(compactMatch.group(0)!);
+      print('[EXTRACT] telephone trouvé via pattern compact: $normalized');
+      return normalized;
     }
     
     return null;
