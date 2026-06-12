@@ -46,16 +46,24 @@ class CardProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadCards() async {
+    debugPrint('[CARDS LOAD] ═══════════════════════════════════════════════════════════');
+    debugPrint('[CARDS LOAD] Début chargement des fiches');
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
       _cards = await _cardDao.getAll();
+      debugPrint('[CARDS LOAD] ✓ ${_cards.length} fiche(s) chargée(s)');
+      for (final card in _cards) {
+        debugPrint('[CARDS LOAD]   - ${card.title} (id: ${card.id})');
+      }
     } catch (e) {
+      debugPrint('[CARDS LOAD] ❌ Erreur: $e');
       _error = 'Erreur chargement fiches: $e';
     }
     _isLoading = false;
     notifyListeners();
+    debugPrint('[CARDS LOAD] ═══════════════════════════════════════════════════════════');
   }
 
   Future<CardModel?> processText(String rawText,
