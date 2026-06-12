@@ -1064,6 +1064,9 @@ class FallbackAIService implements AIService {
         }
 
         seq++;
+        final positionRatio = lines.length > 0 ? li / lines.length : 0.5;
+        final positionBonus = positionRatio > 0.7 ? 10 : (positionRatio > 0.5 ? 5 : 0);
+        final finalScore = analyse.score + positionBonus;
         final candidate = ExtractionCandidate(
           id: 'montant_$seq',
           value: rawValue,
@@ -1072,15 +1075,16 @@ class FallbackAIService implements AIService {
           category: 'montant',
           lineIndex: li,
           sourceLine: context,
-          score: analyse.score,
+          score: finalScore,
           reason: analyse.motCle,
           metadata: {
             'hasEuro': hasEuro,
             'categorie': analyse.categorie.name,
+            'positionRatio': positionRatio,
           },
         );
         candidates.add(candidate);
-        print('[MONTANT] ✓ CANDIDAT #$seq  valeur=$rawValue  score=${analyse.score}%  catégorie=${analyse.categorie.name}');
+        print('[MONTANT] ✓ CANDIDAT #$seq  valeur=$rawValue  score=$finalScore%  catégorie=${analyse.categorie.name}  position=${(positionRatio * 100).toStringAsFixed(0)}%');
       }
     }
 
@@ -1204,25 +1208,28 @@ class FallbackAIService implements AIService {
 
     String? candidate;
 
-    // Strategy 1: first line that contains a company legal form
     final legalFormRegex = RegExp(r'\b(SARL|SAS|SA|EURL|SASU|SCI|SNC|EI|auto-entrepreneur)\b', caseSensitive: false);
     for (int i = 0; i < lines.length && i < 8; i++) {
       if (legalFormRegex.hasMatch(lines[i])) {
-        candidate = lines[i];
+        final line = lines[i];
+        final cleaned = line.replaceAll(legalFormRegex, '').trim();
+        if (cleaned.length >= 2 && cleaned.length < 60) {
+          candidate = cleaned;
+        } else {
+          candidate = line;
+        }
         break;
       }
     }
 
-    // Strategy 2: line containing SIRET number (first header line with it)
     if (candidate == null) {
       final siretRegex = RegExp(r'(\d{14})');
       for (int i = 0; i < lines.length && i < 6; i++) {
         if (siretRegex.hasMatch(lines[i])) {
           final prevLine = i > 0 ? lines[i - 1] : null;
-          if (prevLine != null && prevLine.length > 2 && prevLine.length < 60) {
+          if (prevLine != null && prevLine.length > 2 && prevLine.length < 60 && !_isAddressLine(prevLine)) {
             candidate = prevLine;
           } else {
-            // Try to get text before SIRET on same line
             final siretMatch = siretRegex.firstMatch(lines[i]);
             if (siretMatch != null && siretMatch.start > 2) {
               candidate = lines[i].substring(0, siretMatch.start).trim();
@@ -1233,13 +1240,14 @@ class FallbackAIService implements AIService {
       }
     }
 
-    // Strategy 3: header block — the first substantial line that looks like a name
     if (candidate == null) {
       for (int i = 0; i < lines.length && i < 5; i++) {
         final l = lines[i];
         if (l.length < 2 || l.length > 50) continue;
-        if (RegExp(r'^(facture|devis|contrat|objet|date|réf|ref|tel|email|http|www)', caseSensitive: false).hasMatch(l)) break;
-        if (RegExp(r'^\d{1,3}\s', caseSensitive: false).hasMatch(l)) continue; // address line
+        if (RegExp(r'^(facture|devis|contrat|objet|date|réf|ref|tel|email|http|www|n°|numéro)', caseSensitive: false).hasMatch(l)) continue;
+        if (_isAddressLine(l)) continue;
+        if (RegExp(r'^\d{2,}\s').hasMatch(l)) continue;
+        if (RegExp(r'^\d{5}\s').hasMatch(l)) continue;
         candidate = l;
         break;
       }
@@ -1247,33 +1255,76 @@ class FallbackAIService implements AIService {
 
     if (candidate == null) return null;
 
-    // Clean: remove leading/trailing punctuation, limit length
     candidate = candidate.replaceAll(RegExp(r'^[.\s,;:-]+|[.\s,;:-]+$'), '');
     if (candidate.length < 3 || candidate.length > 60) return null;
+    if (_isAddressLine(candidate)) return null;
 
     return candidate;
+  }
+
+  bool _isAddressLine(String line) {
+    final lower = line.toLowerCase();
+    if (RegExp(r'^\d{1,4}\s+(rue|avenue|boulevard|route|chemin|impasse|allée|place|square|passage|cours|quai)', caseSensitive: false).hasMatch(line)) return true;
+    if (RegExp(r'\b\d{5}\b').hasMatch(line) && lower.length < 80) return true;
+    if (RegExp(r'(rue|avenue|boulevard|route|chemin)\s+', caseSensitive: false).hasMatch(line) && RegExp(r'\d').hasMatch(line)) return true;
+    return false;
   }
 
   // ─── Client extraction ──────────────────────────────────────────────────────
   String? _extractClient(String text) {
     final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
-    // Look for explicit "client" label
+    final clientLabels = [
+      'client', 'destinataire', 'facturé à', 'facture a',
+      'à l\'attention de', 'a l\'attention de', 'donneur d\'ordre',
+    ];
+
     for (int i = 0; i < lines.length; i++) {
-      if (RegExp(r"^(client|factur. |destinataire|. l'attention\s*de)\s*[:\s]", caseSensitive: false).hasMatch(lines[i])) {
+      final lower = lines[i].toLowerCase();
+      bool isClientLine = false;
+      for (final label in clientLabels) {
+        if (lower.startsWith(label)) {
+          isClientLine = true;
+          break;
+        }
+      }
+
+      if (isClientLine) {
         final parts = lines[i].split(RegExp(r'[:\s]+'));
         final clientLine = parts.length > 1 ? parts.sublist(1).join(' ').trim() : '';
-        if (clientLine.length >= 3 && clientLine.length < 60) return clientLine;
-        // Next line might be the client name
-        if (i + 1 < lines.length && lines[i + 1].length < 60) return lines[i + 1];
+        
+        if (clientLine.length >= 3 && clientLine.length < 60 && !_isClientLabel(clientLine)) {
+          return clientLine;
+        }
+        
+        if (i + 1 < lines.length) {
+          final nextLine = lines[i + 1].trim();
+          if (nextLine.length >= 3 && nextLine.length < 60 && !_isClientLabel(nextLine) && !_isAddressLine(nextLine)) {
+            return nextLine;
+          }
+        }
       }
     }
 
-    // Look for M./Mme pattern after "client" section
     final mmMatch = RegExp(r'(?:client|destinataire)[^\n]*\n([\s]*M(?:me)?[\.]?\s*[A-Z][a-zéèêëàâùûôö]+(?:\s+[A-Z][a-zéèêëàâùûôö-]+)*)', caseSensitive: false).firstMatch(text);
-    if (mmMatch != null) return mmMatch.group(1)!.trim();
+    if (mmMatch != null) {
+      final value = mmMatch.group(1)!.trim();
+      if (!_isClientLabel(value)) return value;
+    }
 
     return null;
+  }
+
+  bool _isClientLabel(String value) {
+    final lower = value.toLowerCase().trim();
+    final labels = [
+      'nom et prénom', 'nom prenom', 'client', 'destinataire',
+      'nom', 'prénom', 'raison sociale', 'société',
+    ];
+    for (final label in labels) {
+      if (lower == label) return true;
+    }
+    return false;
   }
 
   // ─── Description extraction ─────────────────────────────────────────────────
@@ -2042,48 +2093,75 @@ class FallbackAIService implements AIService {
   Map<String, String?>? _extractNomPrenom(String text) {
     final results = <String, String?>{};
     
-    // Pattern 1: "nom: XXX" ou "nom XXX" (avec ou sans deux-points)
+    final labelPatterns = [
+      'nom et prénom', 'nom & prénom', 'nom prenom', 'nom et prenom',
+      'nom/prénom', 'nom/prenom', 'nom - prénom',
+      'identité', 'identite', 'état civil', 'etat civil',
+      'titulaire', 'bénéficiaire', 'beneficiaire',
+      'nom de famille', 'prénom usuel', 'prenom usuel',
+    ];
+
+    bool _isLabel(String value) {
+      final lower = value.toLowerCase().trim();
+      for (final label in labelPatterns) {
+        if (lower == label || lower.contains(label)) return true;
+      }
+      if (lower == 'nom' || lower == 'prenom' || lower == 'prénom') return true;
+      if (RegExp(r'^[A-Z\s&/]+$').hasMatch(value) && value.length > 5) return true;
+      return false;
+    }
+    
     final nomMatch = RegExp(
       r'(?:nom|name)[:\s]+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)',
       caseSensitive: false,
     ).firstMatch(text);
     if (nomMatch != null) {
-      results['nom'] = nomMatch.group(1)!.trim();
-      print('[EXTRACT] nom trouvé via pattern "nom:": ${results['nom']}');
+      final value = nomMatch.group(1)!.trim();
+      if (!_isLabel(value)) {
+        results['nom'] = value;
+        print('[EXTRACT] nom trouvé via pattern "nom:": $value');
+      }
     }
     
-    // Pattern 2: "prenom: XXX" ou "prenom XXX" ou "prénom XXX" (avec ou sans deux-points)
     final prenomMatch = RegExp(
       r'(?:pr[ée]nom|firstname)[:\s]+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)',
       caseSensitive: false,
     ).firstMatch(text);
     if (prenomMatch != null) {
-      results['prenom'] = prenomMatch.group(1)!.trim();
-      print('[EXTRACT] prenom trouvé via pattern "prenom:": ${results['prenom']}');
+      final value = prenomMatch.group(1)!.trim();
+      if (!_isLabel(value)) {
+        results['prenom'] = value;
+        print('[EXTRACT] prenom trouvé via pattern "prenom:": $value');
+      }
     }
     
-    // Pattern 3: "M. XXX YYY" ou "Mme XXX YYY"
     if (results.isEmpty) {
       final civiliteMatch = RegExp(
         r'(?:M\.?|Mme|Mr\.?)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)',
         caseSensitive: false,
       ).firstMatch(text);
       if (civiliteMatch != null) {
-        results['prenom'] = civiliteMatch.group(1)!.trim();
-        results['nom'] = civiliteMatch.group(2)!.trim();
-        print('[EXTRACT] nom/prenom trouvés via pattern "M./Mme": ${results['prenom']} ${results['nom']}');
+        final prenom = civiliteMatch.group(1)!.trim();
+        final nom = civiliteMatch.group(2)!.trim();
+        if (!_isLabel(prenom) && !_isLabel(nom)) {
+          results['prenom'] = prenom;
+          results['nom'] = nom;
+          print('[EXTRACT] nom/prenom trouvés via pattern "M./Mme": $prenom $nom');
+        }
       }
     }
     
-    // Pattern 4: Extraction directe "nom XXX prenom YYY" ou "prenom XXX nom YYY"
     if (results['nom'] == null) {
       final directNomMatch = RegExp(
         r'\bnom\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)\b',
         caseSensitive: false,
       ).firstMatch(text);
       if (directNomMatch != null) {
-        results['nom'] = directNomMatch.group(1)!.trim();
-        print('[EXTRACT] nom trouvé via pattern direct "nom XXX": ${results['nom']}');
+        final value = directNomMatch.group(1)!.trim();
+        if (!_isLabel(value)) {
+          results['nom'] = value;
+          print('[EXTRACT] nom trouvé via pattern direct "nom XXX": $value');
+        }
       }
     }
     
@@ -2093,8 +2171,11 @@ class FallbackAIService implements AIService {
         caseSensitive: false,
       ).firstMatch(text);
       if (directPrenomMatch != null) {
-        results['prenom'] = directPrenomMatch.group(1)!.trim();
-        print('[EXTRACT] prenom trouvé via pattern direct "prenom XXX": ${results['prenom']}');
+        final value = directPrenomMatch.group(1)!.trim();
+        if (!_isLabel(value)) {
+          results['prenom'] = value;
+          print('[EXTRACT] prenom trouvé via pattern direct "prenom XXX": $value');
+        }
       }
     }
     

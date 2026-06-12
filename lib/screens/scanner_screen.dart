@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/ocr_service.dart';
 import '../services/document_scanner_service.dart';
+import '../services/ocr_quality_scorer.dart';
 import '../providers/card_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import 'verification_screen.dart';
+import 'ocr_debug_screen.dart';
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
@@ -100,11 +102,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     String ocrText;
     
     if (kIsWeb) {
-      // Sur web, utiliser les bytes prétraités
       ocrText = await _ocr.extractTextFromImageBytes(processedBytes);
     } else {
-      // Sur natif, utiliser le path (pas de prétraitement sur natif pour l'instant)
-      ocrText = await _ocr.extractTextFromImage(xFile.path);
+      ocrText = await _ocr.extractTextFromImageBytesNative(processedBytes);
     }
     
     final elapsed = sw.elapsedMilliseconds;
@@ -122,6 +122,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
       print('[OCR RESULT] ❌ AUCUN TEXTE EXTRAIT');
     }
     print('[OCR RESULT] ═══════════════════════════════════════════════════════════');
+
+    final qualityResult = OcrQualityScorer.analyze(ocrText);
+    print('[OCR QUALITY] Score: ${qualityResult.score}/100 (${qualityResult.level})');
+    for (final w in qualityResult.warnings) {
+      print('[OCR QUALITY] ⚠ $w');
+    }
 
     setState(() => _statusText = 'Analyse du document...');
 
@@ -157,6 +163,74 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     if (mounted) {
       if (draft != null) {
+        if (qualityResult.isPoor) {
+          final shouldContinue = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: AppColors.accentOrange, size: 24),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Text('OCR peu fiable'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Score qualité : ${qualityResult.score.toInt()}/100 (${qualityResult.level})',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.accentOrange,
+                        fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ...qualityResult.warnings.map((w) => Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text('• $w',
+                            style: Theme.of(ctx).textTheme.bodySmall),
+                      )),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'L\'extraction automatique peut être imprécise. Vérification manuelle recommandée.',
+                    style: Theme.of(ctx)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.textTertiary),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Annuler'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx, true);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OcrDebugScreen(
+                          originalBytes: bytes,
+                          fileName: xFile.name,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Debug OCR'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Continuer'),
+                ),
+              ],
+            ),
+          );
+          if (shouldContinue != true) return;
+        }
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

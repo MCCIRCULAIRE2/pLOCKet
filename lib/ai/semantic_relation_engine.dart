@@ -214,4 +214,24 @@ class SemanticRelationEngine {
     
     return [];
   }
+
+  static List<String> getRelationSynonyms(String relation) {
+    final lower = relation.toLowerCase();
+    for (final entry in _familyRelations.entries) {
+      if (entry.key == lower || entry.value.contains(lower)) {
+        return List<String>.from(entry.value);
+      }
+    }
+    for (final entry in _housingCategories.entries) {
+      if (entry.key == lower || entry.value.contains(lower)) {
+        return List<String>.from(entry.value);
+      }
+    }
+    for (final entry in _vehicleCategories.entries) {
+      if (entry.key == lower || entry.value.contains(lower)) {
+        return List<String>.from(entry.value);
+      }
+    }
+    return [];
+  }
 }

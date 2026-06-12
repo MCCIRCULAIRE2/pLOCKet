@@ -122,6 +122,46 @@ class CardProvider extends ChangeNotifier {
     await loadCards();
   }
 
+  Future<void> removeAnalyticalValueFromCards({
+    required String fieldName,
+    required String label,
+    List<String> aliases = const [],
+  }) async {
+    debugPrint('[CARDS REMOVE] Suppression de $fieldName="$label" des fiches');
+    final allLabels = {label, ...aliases};
+    int updatedCount = 0;
+
+    for (final card in _cards) {
+      bool cardUpdated = false;
+      final updatedFields = Map<String, dynamic>.from(card.fields);
+
+      for (final entry in updatedFields.entries) {
+        if (entry.key != fieldName) continue;
+        final v = entry.value;
+        String? fieldValue;
+        if (v is Map<String, dynamic>) {
+          fieldValue = v['v']?.toString();
+        } else if (v is String) {
+          fieldValue = v;
+        }
+        if (fieldValue != null && allLabels.contains(fieldValue)) {
+          updatedFields.remove(entry.key);
+          cardUpdated = true;
+          debugPrint('[CARDS REMOVE]   ✓ Fiche "${card.title}": $fieldName supprimé');
+        }
+      }
+
+      if (cardUpdated) {
+        final updatedCard = card.copyWith(fields: updatedFields);
+        await _cardDao.update(updatedCard);
+        updatedCount++;
+      }
+    }
+
+    debugPrint('[CARDS REMOVE] ✓ $updatedCount fiche(s) mise(s) à jour');
+    await loadCards();
+  }
+
   Future<CardModel?> processText(String rawText,
       {String? filePath, String? mimeType}) async {
     _error = null;

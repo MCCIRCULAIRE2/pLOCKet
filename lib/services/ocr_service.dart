@@ -17,15 +17,13 @@ class OcrService {
   Future<String> extractTextFromImage(String imagePath) async {
     if (kIsWeb) {
       debugPrint('[OCR] ÉTAPE 5a - OCR image Web : début');
-      // Sur web, on ne peut pas utiliser le path, on doit utiliser les bytes
-      // Cette méthode sera appelée avec les bytes depuis scanner_screen
       return '';
     }
     final sw = Stopwatch()..start();
     debugPrint('[OCR] ÉTAPE 5a - OCR image : début sur $imagePath');
     try {
       final inputImage = InputImage.fromFilePath(imagePath);
-      final textRecognizer = TextRecognizer();
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
       try {
         final recognizedText = await textRecognizer.processImage(inputImage);
         final text = recognizedText.text.trim();
@@ -36,6 +34,35 @@ class OcrService {
       }
     } catch (e) {
       debugPrint('[OCR] ÉTAPE 5a - OCR image : ÉCHEC — $e [${sw.elapsedMilliseconds}ms]');
+      return '';
+    }
+  }
+
+  Future<String> extractTextFromImageBytesNative(Uint8List imageBytes) async {
+    if (kIsWeb) return '';
+    final sw = Stopwatch()..start();
+    debugPrint('[OCR] ÉTAPE 5c - OCR image bytes native : début (${imageBytes.length} octets)');
+    try {
+      final tempDir = await Directory.systemTemp.createTemp('ocr_');
+      final tempFile = File('${tempDir.path}/ocr_image.jpg');
+      await tempFile.writeAsBytes(imageBytes);
+      
+      final inputImage = InputImage.fromFilePath(tempFile.path);
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      try {
+        final recognizedText = await textRecognizer.processImage(inputImage);
+        final text = recognizedText.text.trim();
+        debugPrint('[OCR] ÉTAPE 5c - OCR image bytes native : SUCCÈS (${text.length} car.) [${sw.elapsedMilliseconds}ms]');
+        return text;
+      } finally {
+        textRecognizer.close();
+        try {
+          await tempFile.delete();
+          await tempDir.delete();
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[OCR] ÉTAPE 5c - OCR image bytes native : ÉCHEC — $e [${sw.elapsedMilliseconds}ms]');
       return '';
     }
   }

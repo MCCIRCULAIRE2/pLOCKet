@@ -65,8 +65,13 @@ class DocumentScannerService {
       processedImage = _adaptiveThreshold(processedImage);
       print('[PREPROCESS] ✓ Binarisation terminée');
       
-      // ÉTAPE 7 : Encodage JPEG qualité 95%
-      print('[PREPROCESS] ÉTAPE 7 - Encodage JPEG...');
+      // ÉTAPE 7 : Débruitage (suppression pixels isolés)
+      print('[PREPROCESS] ÉTAPE 7 - Débruitage...');
+      processedImage = _denoise(processedImage);
+      print('[PREPROCESS] ✓ Débruitage terminé');
+      
+      // ÉTAPE 8 : Encodage JPEG qualité 95%
+      print('[PREPROCESS] ÉTAPE 8 - Encodage JPEG...');
       final processedBytes = img.encodeJpg(processedImage, quality: 95);
       
       final elapsed = sw.elapsedMilliseconds;
@@ -88,9 +93,18 @@ class DocumentScannerService {
   /// Note: La bibliothèque `image` ne supporte pas la lecture EXIF complète
   /// Pour l'instant, on retourne l'image telle quelle
   img.Image _fixOrientation(img.Image image, Uint8List bytes) {
-    print('[PREPROCESS]   Correction orientation EXIF non supportée (bibliothèque image)');
-    print('[PREPROCESS]   Image retournée sans rotation');
-    return image;
+    try {
+      final baked = img.bakeOrientation(image);
+      if (baked.width != image.width || baked.height != image.height) {
+        print('[PREPROCESS]   ✓ Orientation EXIF corrigée: ${image.width}x${image.height} → ${baked.width}x${baked.height}');
+        return baked;
+      }
+      print('[PREPROCESS]   Orientation OK, pas de rotation nécessaire');
+      return image;
+    } catch (e) {
+      print('[PREPROCESS]   ⚠ Erreur orientation EXIF: $e');
+      return image;
+    }
   }
 
   /// Redimensionne intelligemment en gardant le ratio
@@ -210,5 +224,36 @@ class DocumentScannerService {
     }
     
     return binary;
+  }
+
+  img.Image _denoise(img.Image image) {
+    final width = image.width;
+    final height = image.height;
+    final cleaned = img.Image.from(image);
+    int removed = 0;
+
+    for (int y = 1; y < height - 1; y++) {
+      for (int x = 1; x < width - 1; x++) {
+        final pixel = image.getPixel(x, y).r.toInt();
+        int sameCount = 0;
+
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            final neighbor = image.getPixel(x + dx, y + dy).r.toInt();
+            if (neighbor == pixel) sameCount++;
+          }
+        }
+
+        if (sameCount <= 1) {
+          final majority = pixel == 0 ? 255 : 0;
+          cleaned.setPixelRgba(x, y, majority, majority, majority, 255);
+          removed++;
+        }
+      }
+    }
+
+    print('[PREPROCESS]   Pixels bruités supprimés: $removed');
+    return cleaned;
   }
 }

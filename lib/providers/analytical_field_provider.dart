@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/analytical_field.dart';
+import '../models/card_model.dart';
 import '../database/daos/analytical_field_dao.dart';
+import '../ai/semantic_relation_engine.dart';
 import 'card_provider.dart';
 
 class AnalyticalFieldProvider extends ChangeNotifier {
@@ -131,6 +133,104 @@ class AnalyticalFieldProvider extends ChangeNotifier {
     await loadAll();
   }
 
+  List<CardModel> getCardsUsingValue(AnalyticalValue value) {
+    if (_cardProvider == null) return [];
+    final fieldName = _getFieldNameById(value.fieldId);
+    final cards = <CardModel>[];
+    for (final card in _cardProvider!.cards) {
+      for (final entry in card.fields.entries) {
+        if (entry.key != fieldName) continue;
+        final v = entry.value;
+        String? fieldValue;
+        if (v is Map<String, dynamic>) {
+          fieldValue = v['v']?.toString();
+        } else if (v is String) {
+          fieldValue = v;
+        }
+        if (fieldValue == value.label ||
+            value.aliases.any((a) => a == fieldValue)) {
+          cards.add(card);
+          break;
+        }
+      }
+    }
+    return cards;
+  }
+
+  int countCardUsage(AnalyticalValue value) =>
+      getCardsUsingValue(value).length;
+
+  Future<AnalyticalValue?> findSimilarValue(String fieldId, String label) async {
+    final values = valuesForField(fieldId);
+    final candidate = AnalyticalValue(id: '', fieldId: fieldId, label: label);
+    for (final v in values) {
+      if (v.similarityTo(candidate) >= 0.85) return v;
+    }
+    return null;
+  }
+
+  Future<void> deleteValueWithOption(
+    AnalyticalValue value,
+    ValueDeletionOption option,
+  ) async {
+    switch (option) {
+      case ValueDeletionOption.unlinkOnly:
+        await _dao.deleteValue(value.id);
+        break;
+      case ValueDeletionOption.removeFromAll:
+        final fieldName = _getFieldNameById(value.fieldId);
+        if (_cardProvider != null) {
+          await _cardProvider!.removeAnalyticalValueFromCards(
+            fieldName: fieldName,
+            label: value.label,
+            aliases: value.aliases,
+          );
+        }
+        await _dao.deleteValue(value.id);
+        break;
+      case ValueDeletionOption.cancel:
+        return;
+    }
+    await loadAll();
+  }
+
+  Future<void> mergeValues(AnalyticalValue keep, AnalyticalValue merge) async {
+    final mergedAliases = List<String>.from(keep.aliases);
+    if (!mergedAliases.contains(merge.label)) {
+      mergedAliases.add(merge.label);
+    }
+    for (final alias in merge.aliases) {
+      if (!mergedAliases.contains(alias)) {
+        mergedAliases.add(alias);
+      }
+    }
+    final mergedIdentifiers = Map<String, String>.from(keep.identifiers);
+    mergedIdentifiers.addAll(merge.identifiers);
+
+    final fieldName = _getFieldNameById(keep.fieldId);
+    if (_cardProvider != null) {
+      await _cardProvider!.updateCardsWithAnalyticalValue(
+        fieldName: fieldName,
+        oldLabel: merge.label,
+        newLabel: keep.label,
+      );
+      for (final alias in merge.aliases) {
+        await _cardProvider!.updateCardsWithAnalyticalValue(
+          fieldName: fieldName,
+          oldLabel: alias,
+          newLabel: keep.label,
+        );
+      }
+    }
+
+    await _dao.updateValue(keep.copyWith(
+      aliases: mergedAliases,
+      identifiers: mergedIdentifiers,
+    ));
+    await _dao.deleteValue(merge.id);
+    await loadAll();
+  }
+
   Future<void> renameValue(AnalyticalValue value, String newLabel) async {
     final oldLabel = value.label;
     final fieldName = _getFieldNameById(value.fieldId);
@@ -188,6 +288,7 @@ class AnalyticalFieldProvider extends ChangeNotifier {
         continue;
       }
 
+      bool aliasMatched = false;
       for (final alias in value.aliases) {
         if (textLower.contains(alias.toLowerCase())) {
           print('[ALIAS] ✓ "$alias" détecté');
@@ -200,7 +301,28 @@ class AnalyticalFieldProvider extends ChangeNotifier {
             confidence: 80,
             matchedOn: alias,
           ));
+          aliasMatched = true;
           break;
+        }
+      }
+      if (aliasMatched) continue;
+
+      if (value.relation != null && value.relation!.isNotEmpty) {
+        final synonyms = SemanticRelationEngine.getRelationSynonyms(value.relation!);
+        for (final syn in synonyms) {
+          if (textLower.contains(syn.toLowerCase())) {
+            print('[RELATION] ✓ Synonyme "$syn" détecté (relation: ${value.relation})');
+            print('[RELATION]   Résolu vers: ${value.label}');
+            print('[RELATION]   Référentiel: ${field.name}');
+            print('[RELATION]   Confiance: 70%');
+            matches.add(AnalyticalValueMatch(
+              field: field,
+              value: value,
+              confidence: 70,
+              matchedOn: '$syn (via ${value.relation})',
+            ));
+            break;
+          }
         }
       }
     }
@@ -279,4 +401,10 @@ class AnalyticalValueMatch {
     required this.confidence,
     required this.matchedOn,
   });
+}
+
+enum ValueDeletionOption {
+  unlinkOnly,
+  removeFromAll,
+  cancel,
 }

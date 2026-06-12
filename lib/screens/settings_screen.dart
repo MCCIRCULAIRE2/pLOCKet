@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../models/analytical_field.dart';
 import '../providers/analytical_field_provider.dart';
 import '../providers/user_profile_provider.dart';
@@ -13,6 +11,9 @@ import '../widgets/adaptive_dialog.dart';
 import 'ocr_comparison_test.dart';
 import 'debug_storage_screen.dart';
 import 'user_profile_screen.dart';
+import 'analytical_value_detail_screen.dart';
+import 'ocr_debug_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -78,6 +79,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             builder: (_) => const DebugStorageScreen(),
                           ),
                         );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.camera_alt_outlined),
+                      title: const Text('Debug OCR Pipeline'),
+                      subtitle: const Text('Inspecter chaque étape de l\'OCR'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final xFile = await picker.pickImage(
+                          source: ImageSource.camera,
+                          imageQuality: 100,
+                        );
+                        if (xFile != null && context.mounted) {
+                          final bytes = await xFile.readAsBytes();
+                          if (context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => OcrDebugScreen(
+                                  originalBytes: bytes,
+                                  fileName: xFile.name,
+                                ),
+                              ),
+                            );
+                          }
+                        }
                       },
                     ),
                   ],
@@ -322,8 +351,8 @@ class _FieldCard extends StatelessWidget {
     String? selectedRelation;
     String? selectedCategory;
     String? selectedRole;
+    AnalyticalValue? similarValue;
 
-    // Obtenir les suggestions de relations pour ce type de champ
     final relationSuggestions = SemanticRelationEngine.getRelationSuggestions(field.name);
 
     showAdaptiveModalDialog(
@@ -342,7 +371,54 @@ class _FieldCard extends StatelessWidget {
                     hintText: 'Ex: Maison Saint-Girons',
                   ),
                   autofocus: true,
+                  onChanged: (text) async {
+                    final similar = await provider.findSimilarValue(field.id, text);
+                    setDialogState(() => similarValue = similar);
+                  },
                 ),
+                if (similarValue != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentOrange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                      border: Border.all(
+                          color: AppColors.accentOrange.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            size: 18, color: AppColors.accentOrange),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Valeur similaire existante : "${similarValue!.label}"',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: AppColors.accentOrange),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AnalyticalValueDetailScreen(
+                                  value: similarValue!,
+                                  field: field,
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text('Voir'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
@@ -392,7 +468,7 @@ class _FieldCard extends StatelessWidget {
                 if (relationSuggestions.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: selectedRelation,
+                    initialValue: selectedRelation,
                     decoration: const InputDecoration(
                       labelText: 'Relation / Catégorie',
                       hintText: 'Ex: conjoint, enfant, résidence principale...',
@@ -404,7 +480,6 @@ class _FieldCard extends StatelessWidget {
                     onChanged: (v) {
                       setDialogState(() {
                         selectedRelation = v;
-                        // Déterminer si c'est une relation, catégorie ou rôle
                         if (['conjoint', 'enfant', 'fils', 'fille', 'parent', 'frère', 'soeur', 'ami', 'collègue'].contains(v)) {
                           selectedCategory = null;
                           selectedRole = v;
@@ -426,6 +501,26 @@ class _FieldCard extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
           child: const Text('Annuler'),
         ),
+        if (similarValue != null)
+          OutlinedButton(
+            onPressed: () async {
+              final mergedAliases = List<String>.from(similarValue!.aliases);
+              final newLabel = labelController.text.trim();
+              if (!mergedAliases.contains(newLabel)) {
+                mergedAliases.add(newLabel);
+              }
+              for (final a in aliases) {
+                if (!mergedAliases.contains(a)) {
+                  mergedAliases.add(a);
+                }
+              }
+              await provider.updateValue(similarValue!.copyWith(
+                aliases: mergedAliases,
+              ));
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Fusionner'),
+          ),
         FilledButton(
           onPressed: () {
             final label = labelController.text.trim();
@@ -456,7 +551,25 @@ class _ValueChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final provider = context.read<AnalyticalFieldProvider>();
+    final usageCount = provider.countCardUsage(value);
+    final field = provider.fields.firstWhere(
+      (f) => f.id == fieldId,
+      orElse: () => AnalyticalField(id: fieldId, name: ''),
+    );
+
     return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AnalyticalValueDetailScreen(
+              value: value,
+              field: field,
+            ),
+          ),
+        );
+      },
       onLongPress: () => _showValueOptions(context),
       child: Container(
         padding:
@@ -472,14 +585,63 @@ class _ValueChip extends StatelessWidget {
             Text(value.label,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(fontWeight: FontWeight.w500)),
+            const SizedBox(width: 4),
+            Text('($usageCount)',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: AppColors.textTertiary, fontSize: 10)),
             if (value.aliases.isNotEmpty) ...[
               const SizedBox(width: 4),
-              Text('+${value.aliases.length}',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: AppColors.textTertiary, fontSize: 10)),
+              GestureDetector(
+                onTap: () => _showAliasesPopup(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                  ),
+                  child: Text('+${value.aliases.length}',
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: AppColors.primaryBlue, fontSize: 10)),
+                ),
+              ),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _showAliasesPopup(BuildContext context) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text('Alias de "${value.label}"',
+            style: theme.textTheme.titleSmall),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: value.aliases
+              .map((a) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.label_outline,
+                            size: 14, color: AppColors.textTertiary),
+                        const SizedBox(width: 6),
+                        Text(a, style: theme.textTheme.bodyMedium),
+                      ],
+                    ),
+                  ))
+              .toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Fermer'),
+          ),
+        ],
       ),
     );
   }
@@ -514,12 +676,103 @@ class _ValueChip extends StatelessWidget {
                   style: TextStyle(color: AppColors.accentRed)),
               onTap: () {
                 Navigator.pop(ctx);
-                provider.deleteValue(value.id);
+                _showDeleteValueDialog(context, provider);
               },
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showDeleteValueDialog(
+      BuildContext context, AnalyticalFieldProvider provider) {
+    final cards = provider.getCardsUsingValue(value);
+    if (cards.isEmpty) {
+      showAdaptiveModalDialog(
+        context: context,
+        title: 'Supprimer "${value.label}" ?',
+        content: const Text(
+            'Cette valeur n\'est utilisée par aucune fiche.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              provider.deleteValue(value.id);
+              Navigator.pop(context);
+            },
+            style:
+                FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      );
+      return;
+    }
+
+    showAdaptiveModalDialog(
+      context: context,
+      title: 'Supprimer "${value.label}" ?',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cette valeur est utilisée par ${cards.length} fiche${cards.length > 1 ? 's' : ''} :',
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: ListView(
+              shrinkWrap: true,
+              children: cards
+                  .map((c) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text('• ${c.title}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: AppColors.textSecondary)),
+                      ))
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const Divider(),
+          const SizedBox(height: AppSpacing.sm),
+          Text('Que souhaitez-vous faire ?',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        OutlinedButton(
+          onPressed: () async {
+            await provider.deleteValueWithOption(
+                value, ValueDeletionOption.unlinkOnly);
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Retirer des fiches'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            await provider.deleteValueWithOption(
+                value, ValueDeletionOption.removeFromAll);
+            if (context.mounted) Navigator.pop(context);
+          },
+          style: FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
+          child: const Text('Supprimer'),
+        ),
+      ],
     );
   }
 

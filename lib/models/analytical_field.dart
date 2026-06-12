@@ -104,6 +104,61 @@ class AnalyticalValue {
         relation: relation ?? this.relation,
         createdAt: createdAt,
       );
+
+  /// Calcule la similarité avec une autre valeur (pour détection de doublons)
+  double similarityTo(AnalyticalValue other) {
+    final label1 = label.toLowerCase().trim();
+    final label2 = other.label.toLowerCase().trim();
+    
+    // Similarité exacte
+    if (label1 == label2) return 1.0;
+    
+    // Similarité avec les alias
+    for (final alias in aliases) {
+      if (alias.toLowerCase().trim() == label2) return 0.95;
+    }
+    for (final alias in other.aliases) {
+      if (alias.toLowerCase().trim() == label1) return 0.95;
+    }
+    
+    // Similarité Levenshtein simplifiée
+    final distance = _levenshteinDistance(label1, label2);
+    final maxLen = label1.length > label2.length ? label1.length : label2.length;
+    if (maxLen == 0) return 0.0;
+    
+    final similarity = 1.0 - (distance / maxLen);
+    return similarity;
+  }
+
+  static int _levenshteinDistance(String s1, String s2) {
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+
+    final matrix = List.generate(
+      s1.length + 1,
+      (i) => List.filled(s2.length + 1, 0),
+    );
+
+    for (int i = 0; i <= s1.length; i++) {
+      matrix[i][0] = i;
+    }
+    for (int j = 0; j <= s2.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (int i = 1; i <= s1.length; i++) {
+      for (int j = 1; j <= s2.length; j++) {
+        final cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
+        matrix[i][j] = [
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost,
+        ].reduce((a, b) => a < b ? a : b);
+      }
+    }
+
+    return matrix[s1.length][s2.length];
+  }
 }
 
 class AnalyticalFieldValue {
