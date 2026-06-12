@@ -56,9 +56,9 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _startAnimation() async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 400));
     await _lockController.forward();
-    await Future.delayed(const Duration(milliseconds: 100));
+    await Future.delayed(const Duration(milliseconds: 400));
     await _glowController.forward();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fadeController.forward();
@@ -312,14 +312,14 @@ class _PocketLockPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..strokeCap = StrokeCap.round;
 
-    final openAngle = lockProgress * 0.85;
+    final openAngle = lockProgress * 0.44;
     final shackleRadius = 10.0;
     final pivotX = lockCenter.dx + shackleRadius - 2;
     final pivotY = bodyTop + 2;
 
     canvas.save();
     canvas.translate(pivotX, pivotY);
-    canvas.rotate(-openAngle);
+    canvas.rotate(openAngle);
     canvas.translate(-pivotX, -pivotY);
 
     final shacklePath = Path();
