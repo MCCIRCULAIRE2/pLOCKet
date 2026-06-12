@@ -68,47 +68,69 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
     }
 
     final file = result.files.first;
-    print('[TEST] Fichier sélectionné: ${file.name}');
-    print('[TEST] Taille: ${file.size} octets');
+    print('[TEST] ÉTAPE 1 - Fichier sélectionné: ${file.name}');
+    print('[TEST] ÉTAPE 1 - Taille: ${file.size} octets');
+    print('[TEST] ÉTAPE 1 - Extension: ${file.extension}');
 
-    // Capturer les bytes et dimensions
-    Uint8List? imageBytes;
+    // ÉTAPE 2: Capturer les bytes bruts
+    Uint8List? rawBytes;
+    if (file.bytes != null) {
+      rawBytes = file.bytes!;
+      print('[TEST] ÉTAPE 2 - Bytes bruts reçus: ${rawBytes.length} octets');
+      print('[TEST] ÉTAPE 2 - Hash MD5: ${_calculateHash(rawBytes)}');
+      
+      // Sauvegarder l'image brute
+      if (kIsWeb) {
+        _saveImageForDebug(rawBytes, 'import_step1_raw.jpg');
+      }
+    }
+
+    // ÉTAPE 3: Décoder l'image pour obtenir les dimensions
     int imageWidth = 0;
     int imageHeight = 0;
+    img.Image? decodedImage;
     
-    if (file.bytes != null) {
-      imageBytes = file.bytes!;
+    if (rawBytes != null) {
       try {
-        final decodedImage = img.decodeImage(imageBytes);
+        decodedImage = img.decodeImage(rawBytes);
         if (decodedImage != null) {
           imageWidth = decodedImage.width;
           imageHeight = decodedImage.height;
-          print('[TEST] Dimensions image: ${imageWidth}x$imageHeight pixels');
+          print('[TEST] ÉTAPE 3 - Image décodée: ${imageWidth}x$imageHeight pixels');
+          print('[TEST] ÉTAPE 3 - Format: ${decodedImage.numChannels} canaux');
         }
       } catch (e) {
-        print('[TEST] ⚠ Impossible de lire les dimensions: $e');
+        print('[TEST] ÉTAPE 3 - ⚠ Impossible de décoder: $e');
       }
     }
+
+    // ÉTAPE 4: Prétraitement (aucun pour l'instant, juste passage direct)
+    Uint8List? bytesForOcr = rawBytes;
+    print('[TEST] ÉTAPE 4 - Bytes pour OCR: ${bytesForOcr?.length ?? 0} octets');
+    print('[TEST] ÉTAPE 4 - Aucune transformation appliquée');
+    print('[TEST] ÉTAPE 4 - Hash MD5: ${_calculateHash(bytesForOcr ?? Uint8List(0))}');
 
     final sw = Stopwatch()..start();
     String ocrText = '';
 
+    // ÉTAPE 5: Appel OCR
     try {
-      if (kIsWeb && file.bytes != null) {
-        print('[TEST] Plateforme: Web (bytes)');
-        print('[TEST] Bytes envoyés à OCR: ${imageBytes?.length ?? 0} octets');
-        ocrText = await _ocr.extractTextFromBytes(file.bytes!, file.name);
+      if (kIsWeb && bytesForOcr != null) {
+        print('[TEST] ÉTAPE 5 - Plateforme: Web');
+        print('[TEST] ÉTAPE 5 - Envoi de ${bytesForOcr.length} octets à Tesseract.js');
+        ocrText = await _ocr.extractTextFromImageBytes(bytesForOcr);
       } else if (file.path != null) {
-        print('[TEST] Plateforme: Native (path)');
+        print('[TEST] ÉTAPE 5 - Plateforme: Native');
+        print('[TEST] ÉTAPE 5 - Envoi du path à ML Kit: ${file.path}');
         ocrText = await _ocr.extractTextFromImage(file.path!);
       }
     } catch (e) {
-      print('[TEST] ❌ Erreur OCR: $e');
+      print('[TEST] ÉTAPE 5 - ❌ Erreur OCR: $e');
     }
 
-    print('[TEST] OCR terminé en ${sw.elapsedMilliseconds}ms');
-    print('[TEST] Caractères extraits: ${ocrText.length}');
-    print('[TEST] Texte OCR:\n$ocrText');
+    print('[TEST] ÉTAPE 6 - OCR terminé en ${sw.elapsedMilliseconds}ms');
+    print('[TEST] ÉTAPE 6 - Caractères extraits: ${ocrText.length}');
+    print('[TEST] ÉTAPE 6 - Texte OCR:\n$ocrText');
 
     // Extraction des champs
     final cardProvider = context.read<CardProvider>();
@@ -132,7 +154,7 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
           _importExtractedFields[entry.key] = entry.value.rawValue;
         }
       }
-      _importImageBytes = imageBytes;
+      _importImageBytes = rawBytes;
       _importImageWidth = imageWidth;
       _importImageHeight = imageHeight;
       _importFileSize = file.size;
@@ -140,9 +162,9 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
       _statusText = '';
     });
 
-    print('[TEST] Champs extraits: ${_importFields}');
+    print('[TEST] ÉTAPE 7 - Champs extraits: ${_importFields}');
     for (final entry in _importExtractedFields.entries) {
-      print('[TEST]   ${entry.key} = ${entry.value}');
+      print('[TEST] ÉTAPE 7 - ${entry.key} = ${entry.value}');
     }
     print('[TEST] ═══════════════════════════════════════════════════════════');
   }
@@ -172,43 +194,62 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
       return;
     }
 
-    print('[TEST] Image sélectionnée: ${xFile.name}');
-    final bytes = await xFile.readAsBytes();
-    print('[TEST] Taille: ${bytes.length} octets');
+    print('[TEST] ÉTAPE 1 - Image sélectionnée: ${xFile.name}');
+    
+    // ÉTAPE 2: Capturer les bytes bruts
+    final rawBytes = await xFile.readAsBytes();
+    print('[TEST] ÉTAPE 2 - Bytes bruts reçus: ${rawBytes.length} octets');
+    print('[TEST] ÉTAPE 2 - Hash MD5: ${_calculateHash(rawBytes)}');
+    
+    // Sauvegarder l'image brute
+    if (kIsWeb) {
+      _saveImageForDebug(rawBytes, 'scanner_step1_raw.jpg');
+    }
 
-    // Capturer les dimensions
+    // ÉTAPE 3: Décoder l'image pour obtenir les dimensions
     int imageWidth = 0;
     int imageHeight = 0;
+    img.Image? decodedImage;
+    
     try {
-      final decodedImage = img.decodeImage(bytes);
+      decodedImage = img.decodeImage(rawBytes);
       if (decodedImage != null) {
         imageWidth = decodedImage.width;
         imageHeight = decodedImage.height;
-        print('[TEST] Dimensions image: ${imageWidth}x$imageHeight pixels');
+        print('[TEST] ÉTAPE 3 - Image décodée: ${imageWidth}x$imageHeight pixels');
+        print('[TEST] ÉTAPE 3 - Format: ${decodedImage.numChannels} canaux');
       }
     } catch (e) {
-      print('[TEST] ⚠ Impossible de lire les dimensions: $e');
+      print('[TEST] ÉTAPE 3 - ⚠ Impossible de décoder: $e');
     }
+
+    // ÉTAPE 4: Prétraitement (aucun pour l'instant, juste passage direct)
+    Uint8List bytesForOcr = rawBytes;
+    print('[TEST] ÉTAPE 4 - Bytes pour OCR: ${bytesForOcr.length} octets');
+    print('[TEST] ÉTAPE 4 - Aucune transformation appliquée');
+    print('[TEST] ÉTAPE 4 - Hash MD5: ${_calculateHash(bytesForOcr)}');
 
     final sw = Stopwatch()..start();
     String ocrText = '';
 
+    // ÉTAPE 5: Appel OCR
     try {
       if (kIsWeb) {
-        print('[TEST] Plateforme: Web (bytes)');
-        print('[TEST] Bytes envoyés à OCR: ${bytes.length} octets');
-        ocrText = await _ocr.extractTextFromImageBytes(bytes);
+        print('[TEST] ÉTAPE 5 - Plateforme: Web');
+        print('[TEST] ÉTAPE 5 - Envoi de ${bytesForOcr.length} octets à Tesseract.js');
+        ocrText = await _ocr.extractTextFromImageBytes(bytesForOcr);
       } else {
-        print('[TEST] Plateforme: Native (path)');
+        print('[TEST] ÉTAPE 5 - Plateforme: Native');
+        print('[TEST] ÉTAPE 5 - Envoi du path à ML Kit: ${xFile.path}');
         ocrText = await _ocr.extractTextFromImage(xFile.path);
       }
     } catch (e) {
-      print('[TEST] ❌ Erreur OCR: $e');
+      print('[TEST] ÉTAPE 5 - ❌ Erreur OCR: $e');
     }
 
-    print('[TEST] OCR terminé en ${sw.elapsedMilliseconds}ms');
-    print('[TEST] Caractères extraits: ${ocrText.length}');
-    print('[TEST] Texte OCR:\n$ocrText');
+    print('[TEST] ÉTAPE 6 - OCR terminé en ${sw.elapsedMilliseconds}ms');
+    print('[TEST] ÉTAPE 6 - Caractères extraits: ${ocrText.length}');
+    print('[TEST] ÉTAPE 6 - Texte OCR:\n$ocrText');
 
     // Extraction des champs
     final cardProvider = context.read<CardProvider>();
@@ -219,7 +260,7 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
       mimeType: 'image/jpeg',
       sourceFileName: xFile.name,
       sourceFileExtension: 'jpg',
-      sourceBytes: bytes,
+      sourceBytes: rawBytes,
     );
 
     setState(() {
@@ -232,17 +273,17 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
           _scannerExtractedFields[entry.key] = entry.value.rawValue;
         }
       }
-      _scannerImageBytes = bytes;
+      _scannerImageBytes = rawBytes;
       _scannerImageWidth = imageWidth;
       _scannerImageHeight = imageHeight;
-      _scannerFileSize = bytes.length;
+      _scannerFileSize = rawBytes.length;
       _isProcessing = false;
       _statusText = '';
     });
 
-    print('[TEST] Champs extraits: ${_scannerFields}');
+    print('[TEST] ÉTAPE 7 - Champs extraits: ${_scannerFields}');
     for (final entry in _scannerExtractedFields.entries) {
-      print('[TEST]   ${entry.key} = ${entry.value}');
+      print('[TEST] ÉTAPE 7 - ${entry.key} = ${entry.value}');
     }
     print('[TEST] ═══════════════════════════════════════════════════════════');
   }
@@ -589,6 +630,20 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
       ..download = filename
       ..click();
     web.URL.revokeObjectURL(url);
+  }
+
+  String _calculateHash(Uint8List bytes) {
+    if (bytes.isEmpty) return 'empty';
+    // Hash simple basé sur les premiers et derniers bytes
+    final first = bytes.take(16).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final last = bytes.skip(bytes.length > 16 ? bytes.length - 16 : 0).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${first}...${last}';
+  }
+
+  void _saveImageForDebug(Uint8List bytes, String filename) {
+    if (!kIsWeb) return;
+    print('[DEBUG] Sauvegarde image: $filename (${bytes.length} octets)');
+    _downloadImage(bytes, filename);
   }
 
   Widget _buildOcrTextComparison(ThemeData theme) {
