@@ -34,15 +34,16 @@ jobs:
       - name: Build Flutter Web
         run: flutter build web --release --base-href /pLOCKet/ --dart-define=BUILD_VERSION=${{ github.run_number }}
 
-      - name: Add cache-busting to JS/CSS files
+      - name: Inject version into Service Worker
         run: |
           cd build/web
           TIMESTAMP=$(date +%s)
-          # Renommer main.dart.js avec timestamp
+          # Injecter la version dans sw.js
+          sed -i "s/__BUILD_VERSION__/$TIMESTAMP/g" sw.js
+          # Renommer les fichiers JS avec timestamp
           if [ -f main.dart.js ]; then
             mv main.dart.js main.dart.js?v=$TIMESTAMP
           fi
-          # Renommer flutter.js avec timestamp
           if [ -f flutter.js ]; then
             mv flutter.js flutter.js?v=$TIMESTAMP
           fi

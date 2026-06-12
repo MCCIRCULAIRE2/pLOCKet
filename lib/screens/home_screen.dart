@@ -6,6 +6,7 @@ import '../providers/search_provider.dart';
 import '../providers/analytical_field_provider.dart';
 import '../widgets/quick_action_button.dart';
 import '../widgets/recent_card_card.dart';
+import '../widgets/update_notification.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import 'scanner_screen.dart';
@@ -128,36 +129,41 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('pLOCKet'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: const Text('pLOCKet'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSearchBar(context, theme),
-            const SizedBox(height: AppSpacing.xl),
-            _buildQuickActions(context, theme),
-            const SizedBox(height: AppSpacing.xxxl),
-            _buildRecentCardsSection(context, theme),
-            const SizedBox(height: AppSpacing.xxxl),
-            _buildRecentQuestionsSection(context, theme),
-            const SizedBox(height: AppSpacing.huge),
-          ],
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSearchBar(context, theme),
+                const SizedBox(height: AppSpacing.xl),
+                _buildQuickActions(context, theme),
+                const SizedBox(height: AppSpacing.xxxl),
+                _buildRecentCardsSection(context, theme),
+                const SizedBox(height: AppSpacing.xxxl),
+                _buildRecentQuestionsSection(context, theme),
+                const SizedBox(height: AppSpacing.huge),
+              ],
+            ),
+          ),
         ),
-      ),
+        const UpdateNotification(),
+      ],
     );
   }
 

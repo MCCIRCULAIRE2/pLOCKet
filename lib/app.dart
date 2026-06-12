@@ -9,6 +9,7 @@ import 'providers/procedure_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/analytical_field_provider.dart';
 import 'providers/user_profile_provider.dart';
+import 'services/update_service.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -19,6 +20,7 @@ class PLocketApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => UpdateService()),
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),
         ChangeNotifierProvider(create: (_) => DocumentProvider()),
         ChangeNotifierProvider(create: (_) => TagProvider()),

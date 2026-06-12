@@ -48,6 +48,59 @@
   -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="pdf_ocr.js"></script>
+  
+  <!-- Service Worker Registration & Update Detection -->
+  <script>
+    let newVersionAvailable = false;
+    let waitingWorker = null;
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          const registration = await navigator.serviceWorker.register('/pLOCKet/sw.js');
+          console.log('[SW] Registered:', registration);
+
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            console.log('[SW] Update found');
+            
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[SW] New version available');
+                newVersionAvailable = true;
+                waitingWorker = newWorker;
+                
+                // Notify Flutter app
+                window.dispatchEvent(new CustomEvent('sw-update-available'));
+              }
+            });
+          });
+
+          // Check for updates every 30 minutes
+          setInterval(() => {
+            registration.update();
+          }, 30 * 60 * 1000);
+
+        } catch (error) {
+          console.error('[SW] Registration failed:', error);
+        }
+      });
+    }
+
+    // Function called from Flutter to apply update
+    window.applyUpdate = function() {
+      if (waitingWorker) {
+        waitingWorker.postMessage('skipWaiting');
+        window.location.reload();
+      }
+    };
+
+    // Function to check if update is available
+    window.checkForUpdate = function() {
+      return newVersionAvailable;
+    };
+  </script>
+  
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
