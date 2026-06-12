@@ -1058,9 +1058,12 @@ class FallbackAIService implements AIService {
     for (int i = 0; i < candidates.length && i < 10; i++) {
       final c = candidates[i];
       final cat = c.metadata['categorie'] ?? '?';
-      print('[MONTANT]   #${i + 1} ${c.value.padRight(15)} score=${c.score}%  catégorie=$cat');
+      print('[MONTANT]   #${i + 1} ${c.value.padRight(15)} score=${c.score}%  catégorie=$cat  valeur=${c.numericValue}');
     }
 
+    // Collecter les candidats pour le total (montantTotal, ligneTableau, inconnu)
+    final totalCandidates = <ExtractionCandidate>[];
+    
     for (final c in candidates) {
       final cat = c.metadata['categorie'] as String? ?? '';
 
@@ -1070,11 +1073,45 @@ class FallbackAIService implements AIService {
       } else if (cat == 'resteAPayer' && reste == null) {
         print('[MONTANT] → reste   = ${c.value} (catégorie=$cat, score=${c.score})');
         reste = c.value;
-      } else if ((cat == 'montantTotal' || cat == 'ligneTableau' || cat == 'inconnu') && total == null) {
-        print('[MONTANT] → total   = ${c.value} (catégorie=$cat, score=${c.score})');
-        total = c.value;
+      } else if (cat == 'montantTotal' || cat == 'ligneTableau' || cat == 'inconnu') {
+        totalCandidates.add(c);
       } else {
-        print('[MONTANT] ignoré ${c.value} — catégorie=$cat déjà assignée ou non prioritaire');
+        print('[MONTANT] ignoré ${c.value} — catégorie=$cat non prioritaire');
+      }
+    }
+
+    // Sélectionner le meilleur total
+    if (totalCandidates.isNotEmpty) {
+      print('[MONTANT] ─── Sélection du total parmi ${totalCandidates.length} candidat(s) ───');
+      
+      // Trier par score décroissant, puis par valeur décroissante
+      totalCandidates.sort((a, b) {
+        final scoreDiff = b.score.compareTo(a.score);
+        if (scoreDiff != 0) return scoreDiff;
+        return b.numericValue.compareTo(a.numericValue);
+      });
+
+      // Si le meilleur score est proche du deuxième (différence < 10 points),
+      // prendre le plus grand montant
+      if (totalCandidates.length >= 2) {
+        final best = totalCandidates[0];
+        final second = totalCandidates[1];
+        final scoreDiff = best.score - second.score;
+        
+        print('[MONTANT] Meilleur: ${best.value} (score=${best.score}, val=${best.numericValue})');
+        print('[MONTANT] Deuxième: ${second.value} (score=${second.score}, val=${second.numericValue})');
+        print('[MONTANT] Différence de score: $scoreDiff points');
+        
+        if (scoreDiff <= 10 && second.numericValue > best.numericValue) {
+          print('[MONTANT] → total   = ${second.value} (scores proches, valeur plus grande)');
+          total = second.value;
+        } else {
+          print('[MONTANT] → total   = ${best.value} (meilleur score)');
+          total = best.value;
+        }
+      } else {
+        print('[MONTANT] → total   = ${totalCandidates[0].value} (seul candidat)');
+        total = totalCandidates[0].value;
       }
     }
 
@@ -1136,7 +1173,7 @@ class FallbackAIService implements AIService {
     if (candidate == null) {
       for (int i = 0; i < lines.length && i < 5; i++) {
         final l = lines[i];
-        if (l.length < 4 || l.length > 50) continue;
+        if (l.length < 2 || l.length > 50) continue;
         if (RegExp(r'^(facture|devis|contrat|objet|date|réf|ref|tel|email|http|www)', caseSensitive: false).hasMatch(l)) break;
         if (RegExp(r'^\d{1,3}\s', caseSensitive: false).hasMatch(l)) continue; // address line
         candidate = l;
