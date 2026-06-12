@@ -4,12 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/analytical_field.dart';
 import '../providers/analytical_field_provider.dart';
+import '../providers/user_profile_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/adaptive_dialog.dart';
 import 'ocr_comparison_test.dart';
 import 'debug_storage_screen.dart';
+import 'user_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,8 +24,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        context.read<AnalyticalFieldProvider>().loadAll());
+    Future.microtask(() {
+      context.read<AnalyticalFieldProvider>().loadAll();
+      context.read<UserProfileProvider>().loadProfile();
+    });
   }
 
   @override
@@ -77,6 +81,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
+              
+              // Section Mes informations
+              GlassSectionHeader(title: 'Mes informations'),
+              const SizedBox(height: AppSpacing.md),
+              Consumer<UserProfileProvider>(
+                builder: (context, profileProvider, _) {
+                  final hasProfile = profileProvider.profile != null && 
+                                     profileProvider.profile!.isNotEmpty;
+                  return GlassCard(
+                    child: ListTile(
+                      leading: const Icon(Icons.person_outline),
+                      title: Text(hasProfile 
+                          ? profileProvider.profile!.nomComplet.isNotEmpty 
+                              ? profileProvider.profile!.nomComplet 
+                              : 'Profil configuré'
+                          : 'Configurer mon profil'),
+                      subtitle: Text(hasProfile 
+                          ? 'Modifier mes informations personnelles'
+                          : 'Nom, email, téléphone, adresse...'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const UserProfileScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.xxl),
               
