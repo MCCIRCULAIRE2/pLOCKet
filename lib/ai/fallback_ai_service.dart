@@ -94,24 +94,58 @@ class FallbackAIService implements AIService {
   Future<AnalysisResult> analyzeContent(String rawText, {List<Map<String, dynamic>> analyticalData = const []}) async {
     final lower = rawText.toLowerCase();
 
+    print('[CLASSIFICATION] ═══════════════════════════════════════════════════════════');
+    print('[CLASSIFICATION] Début classification du document');
+    print('[CLASSIFICATION] Longueur texte: ${rawText.length} caractères');
+    print('[CLASSIFICATION] ═══════════════════════════════════════════════════════════');
+
+    // ÉTAPE 1: Vérifier les événements (priorité haute)
     for (final entry in _eventPatterns.entries) {
-      if (entry.value.any((p) => lower.contains(p))) {
+      final matchedPattern = entry.value.firstWhere(
+        (p) => lower.contains(p),
+        orElse: () => '',
+      );
+      if (matchedPattern.isNotEmpty) {
+        print('[CLASSIFICATION] ✓ Événement détecté: ${entry.key}');
+        print('[CLASSIFICATION]   Mot-clé trouvé: "$matchedPattern"');
+        print('[CLASSIFICATION] ═══════════════════════════════════════════════════════════');
         return _analyzeEvent(rawText, entry.key);
       }
     }
 
-    for (final entry in _typePatterns.entries) {
-      if (entry.value.any((p) => lower.contains(p))) {
-        return _analyzeInformation(rawText, entry.key);
-      }
-    }
-
+    // ÉTAPE 2: Vérifier les documents (AVANT les informations personnelles)
+    // Car une facture peut contenir "email" ou "tel" mais reste une facture
     for (final entry in _documentPatterns.entries) {
-      if (entry.value.any((p) => lower.contains(p))) {
+      final matchedPattern = entry.value.firstWhere(
+        (p) => lower.contains(p),
+        orElse: () => '',
+      );
+      if (matchedPattern.isNotEmpty) {
+        print('[CLASSIFICATION] ✓ Document détecté: ${entry.key}');
+        print('[CLASSIFICATION]   Mot-clé trouvé: "$matchedPattern"');
+        print('[CLASSIFICATION] ═══════════════════════════════════════════════════════════');
         return _analyzeDocument(rawText, entry.key, analyticalData);
       }
     }
 
+    // ÉTAPE 3: Vérifier les informations personnelles (email, téléphone, etc.)
+    for (final entry in _typePatterns.entries) {
+      final matchedPattern = entry.value.firstWhere(
+        (p) => lower.contains(p),
+        orElse: () => '',
+      );
+      if (matchedPattern.isNotEmpty) {
+        print('[CLASSIFICATION] ✓ Information personnelle détectée: ${entry.key}');
+        print('[CLASSIFICATION]   Mot-clé trouvé: "$matchedPattern"');
+        print('[CLASSIFICATION] ═══════════════════════════════════════════════════════════');
+        return _analyzeInformation(rawText, entry.key);
+      }
+    }
+
+    // ÉTAPE 4: Document générique
+    print('[CLASSIFICATION] ⚠ Aucun pattern spécifique détecté');
+    print('[CLASSIFICATION]   Classification comme document général');
+    print('[CLASSIFICATION] ═══════════════════════════════════════════════════════════');
     return _analyzeDocument(rawText, 'general', analyticalData);
   }
 
@@ -585,6 +619,33 @@ class FallbackAIService implements AIService {
         fields[entry.key] = entry.value;
         print('[EXTRACT] ✓ ${entry.key} = ${entry.value}');
       }
+    }
+
+    // ── Extraction nom/prénom (tolérant aux erreurs OCR) ──
+    final nomPrenom = _extractNomPrenom(rawText);
+    if (nomPrenom != null) {
+      if (nomPrenom['nom'] != null && !fields.containsKey('nom')) {
+        fields['nom'] = nomPrenom['nom'];
+        print('[EXTRACT] ✓ nom = ${nomPrenom['nom']}');
+      }
+      if (nomPrenom['prenom'] != null && !fields.containsKey('prenom')) {
+        fields['prenom'] = nomPrenom['prenom'];
+        print('[EXTRACT] ✓ prenom = ${nomPrenom['prenom']}');
+      }
+    }
+
+    // ── Extraction téléphone (tolérant aux erreurs OCR) ──
+    final telephone = _extractTelephone(rawText);
+    if (telephone != null && !fields.containsKey('telephone')) {
+      fields['telephone'] = telephone;
+      print('[EXTRACT] ✓ telephone = $telephone');
+    }
+
+    // ── Extraction adresse email (si présente) ──
+    final email = _extractEmail(rawText);
+    if (email != null && !fields.containsKey('email')) {
+      fields['email'] = email;
+      print('[EXTRACT] ✓ email = $email');
     }
 
     // ── Détection automatique des entités analytiques ──
@@ -1867,5 +1928,91 @@ class FallbackAIService implements AIService {
       return 'Ton';
     }
     return 'Le';
+  }
+
+  // ─── Extraction nom/prénom (tolérant aux erreurs OCR) ─────────────────────
+  Map<String, String?>? _extractNomPrenom(String text) {
+    final results = <String, String?>{};
+    
+    // Pattern 1: "nom: XXX" ou "nom XXX"
+    final nomMatch = RegExp(
+      r'(?:nom|name)[:\s]+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (nomMatch != null) {
+      results['nom'] = nomMatch.group(1)!.trim();
+    }
+    
+    // Pattern 2: "prenom: XXX" ou "prenom XXX" ou "prénom XXX"
+    final prenomMatch = RegExp(
+      r'(?:pr[ée]nom|firstname)[:\s]+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+)?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (prenomMatch != null) {
+      results['prenom'] = prenomMatch.group(1)!.trim();
+    }
+    
+    // Pattern 3: "M. XXX YYY" ou "Mme XXX YYY"
+    if (results.isEmpty) {
+      final civiliteMatch = RegExp(
+        r'(?:M\.?|Mme|Mr\.?)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+)',
+        caseSensitive: false,
+      ).firstMatch(text);
+      if (civiliteMatch != null) {
+        results['prenom'] = civiliteMatch.group(1)!.trim();
+        results['nom'] = civiliteMatch.group(2)!.trim();
+      }
+    }
+    
+    return results.isEmpty ? null : results;
+  }
+
+  // ─── Extraction téléphone (tolérant aux erreurs OCR) ──────────────────────
+  String? _extractTelephone(String text) {
+    // Pattern 1: "tel: XXX" ou "tél: XXX" ou "portable: XXX"
+    final labelMatch = RegExp(
+      r'(?:t[ée]l(?:[ée]phone)?|portable|mobile|phone)[:\s]+([0-9\s.\-()]{8,20})',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (labelMatch != null) {
+      final raw = labelMatch.group(1)!;
+      return _normalizePhone(raw);
+    }
+    
+    // Pattern 2: Numéro français avec parenthèses "(0X XX XX XX XX)"
+    final parenMatch = RegExp(
+      r'\((0[1-9])(?:[\s.-]?(\d{2})){4}\)',
+    ).firstMatch(text);
+    if (parenMatch != null) {
+      return _normalizePhone(parenMatch.group(0)!);
+    }
+    
+    // Pattern 3: Numéro français standard "0X XX XX XX XX"
+    final standardMatch = RegExp(
+      r'\b(0[1-9])(?:[\s.-]?\d{2}){4}\b',
+    ).firstMatch(text);
+    if (standardMatch != null) {
+      return _normalizePhone(standardMatch.group(0)!);
+    }
+    
+    return null;
+  }
+  
+  String _normalizePhone(String raw) {
+    // Supprimer tous les caractères non numériques
+    final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
+    // Formater en "0X XX XX XX XX"
+    if (digits.length == 10) {
+      return '${digits.substring(0, 2)} ${digits.substring(2, 4)} ${digits.substring(4, 6)} ${digits.substring(6, 8)} ${digits.substring(8, 10)}';
+    }
+    return digits;
+  }
+
+  // ─── Extraction email ─────────────────────────────────────────────────────
+  String? _extractEmail(String text) {
+    final emailMatch = RegExp(
+      r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b',
+    ).firstMatch(text);
+    return emailMatch?.group(0);
   }
 }
