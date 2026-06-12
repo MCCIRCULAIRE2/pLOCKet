@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
+import 'package:web/web.dart' as web;
+import 'dart:js_interop';
 import '../services/ocr_service.dart';
 import '../providers/card_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
-import 'verification_screen.dart';
 
 class OcrComparisonTest extends StatefulWidget {
   const OcrComparisonTest({super.key});
@@ -27,12 +29,20 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
   int _importOcrChars = 0;
   int _importFields = 0;
   Map<String, String> _importExtractedFields = {};
+  Uint8List? _importImageBytes;
+  int _importImageWidth = 0;
+  int _importImageHeight = 0;
+  int _importFileSize = 0;
   
   // Résultats Cas B (Scanner)
   String _scannerOcrText = '';
   int _scannerOcrChars = 0;
   int _scannerFields = 0;
   Map<String, String> _scannerExtractedFields = {};
+  Uint8List? _scannerImageBytes;
+  int _scannerImageWidth = 0;
+  int _scannerImageHeight = 0;
+  int _scannerFileSize = 0;
 
   Future<void> _testImport() async {
     setState(() {
@@ -61,12 +71,32 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
     print('[TEST] Fichier sélectionné: ${file.name}');
     print('[TEST] Taille: ${file.size} octets');
 
+    // Capturer les bytes et dimensions
+    Uint8List? imageBytes;
+    int imageWidth = 0;
+    int imageHeight = 0;
+    
+    if (file.bytes != null) {
+      imageBytes = file.bytes!;
+      try {
+        final decodedImage = img.decodeImage(imageBytes);
+        if (decodedImage != null) {
+          imageWidth = decodedImage.width;
+          imageHeight = decodedImage.height;
+          print('[TEST] Dimensions image: ${imageWidth}x$imageHeight pixels');
+        }
+      } catch (e) {
+        print('[TEST] ⚠ Impossible de lire les dimensions: $e');
+      }
+    }
+
     final sw = Stopwatch()..start();
     String ocrText = '';
 
     try {
       if (kIsWeb && file.bytes != null) {
         print('[TEST] Plateforme: Web (bytes)');
+        print('[TEST] Bytes envoyés à OCR: ${imageBytes?.length ?? 0} octets');
         ocrText = await _ocr.extractTextFromBytes(file.bytes!, file.name);
       } else if (file.path != null) {
         print('[TEST] Plateforme: Native (path)');
@@ -102,6 +132,10 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
           _importExtractedFields[entry.key] = entry.value.rawValue;
         }
       }
+      _importImageBytes = imageBytes;
+      _importImageWidth = imageWidth;
+      _importImageHeight = imageHeight;
+      _importFileSize = file.size;
       _isProcessing = false;
       _statusText = '';
     });
@@ -142,12 +176,27 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
     final bytes = await xFile.readAsBytes();
     print('[TEST] Taille: ${bytes.length} octets');
 
+    // Capturer les dimensions
+    int imageWidth = 0;
+    int imageHeight = 0;
+    try {
+      final decodedImage = img.decodeImage(bytes);
+      if (decodedImage != null) {
+        imageWidth = decodedImage.width;
+        imageHeight = decodedImage.height;
+        print('[TEST] Dimensions image: ${imageWidth}x$imageHeight pixels');
+      }
+    } catch (e) {
+      print('[TEST] ⚠ Impossible de lire les dimensions: $e');
+    }
+
     final sw = Stopwatch()..start();
     String ocrText = '';
 
     try {
       if (kIsWeb) {
         print('[TEST] Plateforme: Web (bytes)');
+        print('[TEST] Bytes envoyés à OCR: ${bytes.length} octets');
         ocrText = await _ocr.extractTextFromImageBytes(bytes);
       } else {
         print('[TEST] Plateforme: Native (path)');
@@ -183,6 +232,10 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
           _scannerExtractedFields[entry.key] = entry.value.rawValue;
         }
       }
+      _scannerImageBytes = bytes;
+      _scannerImageWidth = imageWidth;
+      _scannerImageHeight = imageHeight;
+      _scannerFileSize = bytes.length;
       _isProcessing = false;
       _statusText = '';
     });
@@ -244,6 +297,8 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
               if (_importOcrText.isNotEmpty || _scannerOcrText.isNotEmpty) ...[
                 _buildComparisonTable(theme),
                 const SizedBox(height: AppSpacing.xxl),
+                _buildImageComparison(theme),
+                const SizedBox(height: AppSpacing.xxl),
                 _buildOcrTextComparison(theme),
               ],
             ],
@@ -280,6 +335,22 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
               ),
               TableRow(
                 children: [
+                  _tableCell('Résolution'),
+                  _tableCell(_importImageWidth > 0 ? '${_importImageWidth}x$_importImageHeight' : '-'),
+                  _tableCell(_scannerImageWidth > 0 ? '${_scannerImageWidth}x$_scannerImageHeight' : '-'),
+                  _tableCell(_formatResolutionDiff()),
+                ],
+              ),
+              TableRow(
+                children: [
+                  _tableCell('Taille fichier'),
+                  _tableCell(_formatFileSize(_importFileSize)),
+                  _tableCell(_formatFileSize(_scannerFileSize)),
+                  _tableCell(_formatFileSizeDiff(_importFileSize, _scannerFileSize)),
+                ],
+              ),
+              TableRow(
+                children: [
                   _tableCell('Caractères OCR'),
                   _tableCell('$_importOcrChars'),
                   _tableCell('$_scannerOcrChars'),
@@ -303,6 +374,29 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
         ],
       ),
     );
+  }
+
+  String _formatResolutionDiff() {
+    if (_importImageWidth == 0 || _scannerImageWidth == 0) return '-';
+    final importPixels = _importImageWidth * _importImageHeight;
+    final scannerPixels = _scannerImageWidth * _scannerImageHeight;
+    final diff = scannerPixels - importPixels;
+    final percent = importPixels > 0 ? ((diff / importPixels) * 100).toStringAsFixed(1) : '?';
+    return '$diff px ($percent%)';
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes == 0) return '-';
+    if (bytes < 1024) return '$bytes o';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} Ko';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} Mo';
+  }
+
+  String _formatFileSizeDiff(int a, int b) {
+    if (a == 0 || b == 0) return '-';
+    final diff = b - a;
+    final percent = a > 0 ? ((diff / a) * 100).toStringAsFixed(1) : '?';
+    return '${_formatFileSize(diff.abs())} ($percent%)';
   }
 
   Widget _tableCell(String text, {bool bold = false}) {
@@ -346,7 +440,7 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: match ? AppColors.accentGreen.withOpacity(0.1) : AppColors.accentRed.withOpacity(0.1),
+            color: match ? AppColors.accentGreen.withValues(alpha: 0.1) : AppColors.accentRed.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Column(
@@ -361,6 +455,140 @@ class _OcrComparisonTestState extends State<OcrComparisonTest> {
         );
       }).toList(),
     );
+  }
+
+  Widget _buildImageComparison(ThemeData theme) {
+    return Container(
+      padding: AppSpacing.cardPadding,
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Images envoyées à l\'OCR', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Cas A : Import', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (_importImageBytes != null)
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.memory(
+                            _importImageBytes!,
+                            height: 200,
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface2,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Center(
+                          child: Text('(aucune image)', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (_importImageBytes != null && kIsWeb)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _downloadImage(_importImageBytes!, 'import_image.jpg'),
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Télécharger'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Cas B : Scanner', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (_scannerImageBytes != null)
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.memory(
+                            _scannerImageBytes!,
+                            height: 200,
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface2,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Center(
+                          child: Text('(aucune image)', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (_scannerImageBytes != null && kIsWeb)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _downloadImage(_scannerImageBytes!, 'scanner_image.jpg'),
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Télécharger'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _downloadImage(Uint8List bytes, String filename) {
+    if (!kIsWeb) return;
+    
+    final blob = web.Blob([bytes.toJS].toJS);
+    final url = web.URL.createObjectURL(blob);
+    final anchor = web.HTMLAnchorElement()
+      ..href = url
+      ..download = filename
+      ..click();
+    web.URL.revokeObjectURL(url);
   }
 
   Widget _buildOcrTextComparison(ThemeData theme) {
