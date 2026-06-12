@@ -22,29 +22,55 @@ class _ScannerScreenState extends State<ScannerScreen> {
   String _statusText = '';
 
   Future<void> _takePhoto() async {
-    final xFile = await _picker.pickImage(source: ImageSource.camera);
-    if (xFile == null) return;
+    print('[SCAN] ═══════════════════════════════════════════════════════════');
+    print('[SCAN] Début capture photo');
+    
+    final xFile = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 100,  // Qualité maximale
+      maxWidth: null,     // Pas de limite de largeur
+      maxHeight: null,    // Pas de limite de hauteur
+    );
+    
+    if (xFile == null) {
+      print('[SCAN] ❌ Capture annulée');
+      return;
+    }
 
     setState(() {
       _isProcessing = true;
       _statusText = 'Analyse de l\'image...';
     });
 
-    print('[PHOTO] ═══════════════════════════════════════════════════════════');
-    print('[PHOTO] Début traitement photo');
-    print('[PHOTO] Fichier: ${xFile.path}');
-    print('[PHOTO] Nom: ${xFile.name}');
-    print('[PHOTO] MIME type: ${xFile.mimeType ?? "non spécifié"}');
+    print('[SCAN] ✓ Photo capturée');
+    print('[SCAN] Fichier: ${xFile.path}');
+    print('[SCAN] Nom: ${xFile.name}');
+    print('[SCAN] MIME type: ${xFile.mimeType ?? "non spécifié"}');
     
     // Obtenir la taille du fichier
-    try {
-      final bytes = await xFile.readAsBytes();
-      print('[PHOTO] Taille: ${bytes.length} octets (${(bytes.length / 1024).toStringAsFixed(1)} KB)');
-    } catch (e) {
-      print('[PHOTO] ⚠ Impossible de lire la taille: $e');
+    final bytes = await xFile.readAsBytes();
+    print('[SCAN] Taille fichier: ${bytes.length} octets (${(bytes.length / 1024).toStringAsFixed(1)} KB)');
+    
+    // Sur mobile, essayer d'obtenir les dimensions
+    if (!kIsWeb) {
+      try {
+        // Lire les dimensions depuis les bytes JPEG
+        final width = _readJpegWidth(bytes);
+        final height = _readJpegHeight(bytes);
+        if (width != null && height != null) {
+          print('[SCAN] Dimensions originales: ${width}x${height} pixels');
+          print('[SCAN] Mégapixels: ${((width * height) / 1000000).toStringAsFixed(2)} MP');
+        }
+      } catch (e) {
+        print('[SCAN] ⚠ Impossible de lire les dimensions: $e');
+      }
     }
     
-    print('[PHOTO] ═══════════════════════════════════════════════════════════');
+    print('[SCAN] ═══════════════════════════════════════════════════════════');
+
+    print('[BEFORE OCR] ═══════════════════════════════════════════════════════════');
+    print('[BEFORE OCR] Taille envoyée à OCR: ${bytes.length} octets');
+    print('[BEFORE OCR] ═══════════════════════════════════════════════════════════');
 
     print('[OCR IMAGE] ═══════════════════════════════════════════════════════════');
     print('[OCR IMAGE] Démarrage OCR');
@@ -55,7 +81,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
     
     if (kIsWeb) {
       // Sur web, utiliser les bytes
-      final bytes = await xFile.readAsBytes();
       ocrText = await _ocr.extractTextFromImageBytes(bytes);
     } else {
       // Sur natif, utiliser le path
@@ -79,8 +104,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
     print('[OCR RESULT] ═══════════════════════════════════════════════════════════');
 
     setState(() => _statusText = 'Analyse du document...');
-
-    final bytes = kIsWeb ? await xFile.readAsBytes() : null;
 
     print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
     print('[FIELD EXTRACTION] Début extraction de champs');
@@ -128,81 +151,34 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
-  Future<void> _pickFromGallery() async {
-    final xFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (xFile == null) return;
-
-    setState(() {
-      _isProcessing = true;
-      _statusText = 'Analyse de l\'image...';
-    });
-
-    print('[PHOTO OCR] ═══════════════════════════════════════════════════════════');
-    print('[PHOTO OCR] Début OCR galerie');
-    print('[PHOTO OCR] Fichier: ${xFile.path}');
-    print('[PHOTO OCR] ═══════════════════════════════════════════════════════════');
-
-    final ocrText = await _ocr.extractTextFromImage(xFile.path);
-
-    print('[TEXT EXTRACTED] ═══════════════════════════════════════════════════════════');
-    print('[TEXT EXTRACTED] Nombre de caractères: ${ocrText.length}');
-    if (ocrText.length > 500) {
-      print('[TEXT EXTRACTED] 500 premiers caractères:\n${ocrText.substring(0, 500)}');
-    } else if (ocrText.isNotEmpty) {
-      print('[TEXT EXTRACTED] Texte complet:\n$ocrText');
-    } else {
-      print('[TEXT EXTRACTED] ⚠ Aucun texte extrait');
-    }
-    print('[TEXT EXTRACTED] ═══════════════════════════════════════════════════════════');
-
-    setState(() => _statusText = 'Analyse du document...');
-
-    final bytes = kIsWeb ? await xFile.readAsBytes() : null;
-
-    print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
-    print('[FIELD EXTRACTION] Début extraction de champs');
-    print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
-
-    final cardProvider = context.read<CardProvider>();
-    final draft = await cardProvider.analyzeDocument(
-      title: 'Image - ${xFile.name}',
-      ocrText: ocrText.isNotEmpty ? ocrText : '[Image depuis galerie]',
-      filePath: xFile.path,
-      mimeType: 'image/jpeg',
-      sourceFileName: xFile.name,
-      sourceFileExtension: 'jpg',
-      sourceBytes: bytes,
-    );
-
-    if (draft != null) {
-      print('[FIELD EXTRACTION] ✓ ${draft.fields.length} champ(s) extrait(s)');
-      for (final field in draft.fields.entries) {
-        print('[FIELD EXTRACTION]   ${field.key} = ${field.value.rawValue}');
+  int? _readJpegWidth(Uint8List bytes) {
+    try {
+      // Chercher le marqueur SOF0 (Start of Frame)
+      for (int i = 0; i < bytes.length - 9; i++) {
+        if (bytes[i] == 0xFF && bytes[i + 1] == 0xC0) {
+          // Largeur aux bytes 7-8
+          return (bytes[i + 7] << 8) | bytes[i + 8];
+        }
       }
-    } else {
-      print('[FIELD EXTRACTION] ❌ Échec extraction');
+    } catch (e) {
+      return null;
     }
-    print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
+    return null;
+  }
 
-    setState(() {
-      _isProcessing = false;
-      _statusText = '';
-    });
-
-    if (mounted) {
-      if (draft != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VerificationScreen(draft: draft),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(cardProvider.error ?? 'Erreur lors de l\'analyse')),
-        );
+  int? _readJpegHeight(Uint8List bytes) {
+    try {
+      // Chercher le marqueur SOF0 (Start of Frame)
+      for (int i = 0; i < bytes.length - 9; i++) {
+        if (bytes[i] == 0xFF && bytes[i + 1] == 0xC0) {
+          // Hauteur aux bytes 5-6
+          return (bytes[i + 5] << 8) | bytes[i + 6];
+        }
       }
+    } catch (e) {
+      return null;
     }
+    return null;
   }
 
   @override
