@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../providers/card_provider.dart';
 import '../providers/search_provider.dart';
 import '../providers/analytical_field_provider.dart';
@@ -25,20 +26,85 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _hasMicPermission = false;
 
   @override
   void initState() {
     super.initState();
+    _initSpeech();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CardProvider>().loadCards();
       context.read<AnalyticalFieldProvider>().loadAll();
     });
   }
 
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize();
+    if (!mounted) return;
+    setState(() => _hasMicPermission = available);
+  }
+
+  Future<void> _startListening() async {
+    if (!_hasMicPermission) {
+      final available = await _speech.initialize();
+      if (!available) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permission microphone refusée')),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _hasMicPermission = true);
+    }
+
+    if (!mounted) return;
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) return;
+        setState(() {
+          _searchController.text = result.recognizedWords;
+        });
+        
+        // Si la reconnaissance est terminée et qu'il y a du texte, lancer la recherche
+        if (!result.finalResult) return;
+        
+        final query = result.recognizedWords.trim();
+        if (query.isNotEmpty) {
+          _submitSearch(query);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Aucune question détectée. Réessayez.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        listenMode: stt.ListenMode.confirmation,
+        cancelOnError: true,
+        partialResults: true,
+      ),
+    );
+  }
+
+  Future<void> _stopListening() async {
+    await _speech.stop();
+    if (!mounted) return;
+    setState(() => _isListening = false);
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocus.dispose();
+    _speech.stop();
     super.dispose();
   }
 
@@ -110,17 +176,29 @@ class _HomeScreenState extends State<HomeScreen> {
             controller: _searchController,
             focusNode: _searchFocus,
             decoration: InputDecoration(
-              hintText: 'Posez une question...',
+              hintText: _isListening ? 'J\'écoute...' : 'Posez une question...',
               prefixIcon: const Icon(Icons.search, size: 20),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
                       icon: const Icon(Icons.clear, size: 18),
                       onPressed: () {
                         _searchController.clear();
                         setState(() {});
                       },
-                    )
-                  : null,
+                    ),
+                  IconButton(
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      size: 20,
+                      color: _isListening ? AppColors.accentRed : null,
+                    ),
+                    onPressed: _isListening ? _stopListening : _startListening,
+                  ),
+                ],
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                 borderSide: BorderSide.none,

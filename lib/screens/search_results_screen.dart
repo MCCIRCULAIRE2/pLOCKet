@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../ai/ai_service.dart';
 import '../providers/card_provider.dart';
 import '../widgets/response_card.dart';
@@ -19,11 +20,90 @@ class SearchResultsScreen extends StatefulWidget {
 class _SearchResultsScreenState extends State<SearchResultsScreen> {
   AnswerResult? _answer;
   bool _isLoading = true;
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _hasMicPermission = false;
+  final TextEditingController _followUpController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _initSpeech();
     _ask();
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize();
+    if (!mounted) return;
+    setState(() => _hasMicPermission = available);
+  }
+
+  Future<void> _startListening() async {
+    if (!_hasMicPermission) {
+      final available = await _speech.initialize();
+      if (!available) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permission microphone refusée')),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _hasMicPermission = true);
+    }
+
+    if (!mounted) return;
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) return;
+        setState(() {
+          _followUpController.text = result.recognizedWords;
+        });
+        
+        // Si la reconnaissance est terminée et qu'il y a du texte, lancer la recherche
+        if (!result.finalResult) return;
+        
+        final query = result.recognizedWords.trim();
+        if (query.isNotEmpty) {
+          _submitFollowUpSearch(query);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Aucune question détectée. Réessayez.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        listenMode: stt.ListenMode.confirmation,
+        cancelOnError: true,
+        partialResults: true,
+      ),
+    );
+  }
+
+  Future<void> _stopListening() async {
+    await _speech.stop();
+    if (!mounted) return;
+    setState(() => _isListening = false);
+  }
+
+  void _submitFollowUpSearch(String query) {
+    setState(() => _isLoading = true);
+    context.read<CardProvider>().ask(query.trim()).then((answer) {
+      if (mounted) {
+        setState(() {
+          _answer = answer;
+          _isLoading = false;
+          _followUpController.clear();
+          _isListening = false;
+        });
+      }
+    });
   }
 
   Future<void> _ask() async {
@@ -45,6 +125,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         builder: (_) => CardDetailScreen(cardId: cardId),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _followUpController.dispose();
+    _speech.stop();
+    super.dispose();
   }
 
   @override
@@ -92,25 +179,40 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                       child: TextField(
+                        controller: _followUpController,
                         decoration: InputDecoration(
-                          hintText: 'Poser une autre question...',
+                          hintText: _isListening ? 'J\'écoute...' : 'Poser une autre question...',
                           prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_followUpController.text.isNotEmpty)
+                                IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    _followUpController.clear();
+                                    setState(() {});
+                                  },
+                                ),
+                              IconButton(
+                                icon: Icon(
+                                  _isListening ? Icons.mic : Icons.mic_none,
+                                  size: 20,
+                                  color: _isListening ? AppColors.accentRed : null,
+                                ),
+                                onPressed: _isListening ? _stopListening : _startListening,
+                              ),
+                            ],
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                             borderSide: BorderSide.none,
                           ),
                         ),
+                        onChanged: (_) => setState(() {}),
                         onSubmitted: (query) {
                           if (query.trim().isNotEmpty) {
-                            setState(() => _isLoading = true);
-                            context.read<CardProvider>().ask(query.trim()).then((answer) {
-                              if (mounted) {
-                                setState(() {
-                                  _answer = answer;
-                                  _isLoading = false;
-                                });
-                              }
-                            });
+                            _submitFollowUpSearch(query);
                           }
                         },
                       ),
