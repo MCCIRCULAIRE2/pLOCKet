@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "pLOCKet (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--web-port=8080",
+        "-d",
+        "chrome"
+      ]
+    },
+    {
+      "name": "pLOCKet (Edge)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--web-port=8080",
+        "-d",
+        "edge"
+      ]
+    },
+    {
+      "name": "pLOCKet (Chrome - Release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "args": [
+        "--web-port=8080",
+        "-d",
+        "chrome"
+      ]
+    }
+  ]
+}
