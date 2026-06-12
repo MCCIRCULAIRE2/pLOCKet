@@ -66,6 +66,61 @@ class CardProvider extends ChangeNotifier {
     debugPrint('[CARDS LOAD] ═══════════════════════════════════════════════════════════');
   }
 
+  /// Met à jour toutes les fiches qui contiennent l'ancienne valeur analytique
+  Future<void> updateCardsWithAnalyticalValue({
+    required String fieldName,
+    required String oldLabel,
+    required String newLabel,
+  }) async {
+    debugPrint('[CARDS UPDATE] ═══════════════════════════════════════════════════════════');
+    debugPrint('[CARDS UPDATE] Mise à jour des fiches pour $fieldName: "$oldLabel" → "$newLabel"');
+    
+    int updatedCount = 0;
+    
+    for (final card in _cards) {
+      bool cardUpdated = false;
+      final updatedFields = Map<String, dynamic>.from(card.fields);
+      
+      // Parcourir tous les champs de la fiche
+      for (final entry in updatedFields.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        
+        // Si le champ correspond au nom du champ analytique et contient l'ancien label
+        if (key == fieldName) {
+          if (value is Map<String, dynamic>) {
+            final currentValue = value['v'] as String?;
+            if (currentValue == oldLabel) {
+              updatedFields[key] = {
+                ...value,
+                'v': newLabel,
+              };
+              cardUpdated = true;
+              debugPrint('[CARDS UPDATE]   ✓ Fiche "${card.title}": $fieldName mis à jour');
+            }
+          } else if (value is String && value == oldLabel) {
+            updatedFields[key] = newLabel;
+            cardUpdated = true;
+            debugPrint('[CARDS UPDATE]   ✓ Fiche "${card.title}": $fieldName mis à jour');
+          }
+        }
+      }
+      
+      // Si la fiche a été modifiée, la sauvegarder
+      if (cardUpdated) {
+        final updatedCard = card.copyWith(fields: updatedFields);
+        await _cardDao.update(updatedCard);
+        updatedCount++;
+      }
+    }
+    
+    debugPrint('[CARDS UPDATE] ✓ $updatedCount fiche(s) mise(s) à jour');
+    debugPrint('[CARDS UPDATE] ═══════════════════════════════════════════════════════════');
+    
+    // Recharger les fiches pour refléter les changements
+    await loadCards();
+  }
+
   Future<CardModel?> processText(String rawText,
       {String? filePath, String? mimeType}) async {
     _error = null;

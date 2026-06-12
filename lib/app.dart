@@ -25,7 +25,13 @@ class PLocketApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProcedureProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => CardProvider()),
-        ChangeNotifierProvider(create: (_) => AnalyticalFieldProvider()),
+        ChangeNotifierProxyProvider<CardProvider, AnalyticalFieldProvider>(
+          create: (_) => AnalyticalFieldProvider(),
+          update: (_, cardProvider, analyticalProvider) {
+            analyticalProvider!.setCardProvider(cardProvider);
+            return analyticalProvider;
+          },
+        ),
       ],
       child: MaterialApp(
         title: 'pLOCKet',

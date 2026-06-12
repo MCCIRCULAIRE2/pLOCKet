@@ -2,10 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/analytical_field.dart';
 import '../database/daos/analytical_field_dao.dart';
+import 'card_provider.dart';
 
 class AnalyticalFieldProvider extends ChangeNotifier {
   final AnalyticalFieldDao _dao = AnalyticalFieldDao();
   final Uuid _uuid = const Uuid();
+  CardProvider? _cardProvider;
+
+  void setCardProvider(CardProvider cardProvider) {
+    _cardProvider = cardProvider;
+  }
 
   List<AnalyticalField> _fields = [];
   List<AnalyticalField> get fields => _fields;
@@ -101,6 +107,16 @@ class AnalyticalFieldProvider extends ChangeNotifier {
 
   Future<void> updateValue(AnalyticalValue value) async {
     await _dao.updateValue(value);
+    
+    // Si les alias ont changé, mettre à jour les fiches
+    if (_cardProvider != null) {
+      await _cardProvider!.updateCardsWithAnalyticalValue(
+        fieldName: _getFieldNameById(value.fieldId),
+        oldLabel: value.label,
+        newLabel: value.label,
+      );
+    }
+    
     await loadAll();
   }
 
@@ -110,8 +126,35 @@ class AnalyticalFieldProvider extends ChangeNotifier {
   }
 
   Future<void> renameValue(AnalyticalValue value, String newLabel) async {
+    final oldLabel = value.label;
+    final fieldName = _getFieldNameById(value.fieldId);
+    
+    debugPrint('[ANALYTICAL] ═══════════════════════════════════════════════════════════');
+    debugPrint('[ANALYTICAL] Renommage valeur: "$oldLabel" → "$newLabel"');
+    debugPrint('[ANALYTICAL] Champ: $fieldName');
+    
     await _dao.updateValue(value.copyWith(label: newLabel));
+    
+    // Mettre à jour toutes les fiches qui utilisent cette valeur
+    if (_cardProvider != null) {
+      await _cardProvider!.updateCardsWithAnalyticalValue(
+        fieldName: fieldName,
+        oldLabel: oldLabel,
+        newLabel: newLabel,
+      );
+    }
+    
     await loadAll();
+    debugPrint('[ANALYTICAL] ✓ Renommage terminé');
+    debugPrint('[ANALYTICAL] ═══════════════════════════════════════════════════════════');
+  }
+
+  String _getFieldNameById(String fieldId) {
+    final field = _fields.firstWhere(
+      (f) => f.id == fieldId,
+      orElse: () => AnalyticalField(id: fieldId, name: 'unknown'),
+    );
+    return field.name;
   }
 
   List<AnalyticalValueMatch> findMatches(String text) {
