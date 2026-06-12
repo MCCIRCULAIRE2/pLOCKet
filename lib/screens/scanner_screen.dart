@@ -243,7 +243,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 const SizedBox(height: AppSpacing.xxl),
                 Text('Scanner un document', style: theme.textTheme.titleLarge),
                 const SizedBox(height: AppSpacing.sm),
-                Text('Prenez une photo ou choisissez depuis la galerie',
+                Text('Prenez une photo de votre document',
                     style: theme.textTheme.bodySmall,
                     textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.xxxl),
@@ -254,12 +254,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextButton.icon(
-                  onPressed: _pickFromGallery,
-                  icon: const Icon(Icons.photo_library_outlined, size: 20),
-                  label: const Text('Choisir depuis la galerie'),
                 ),
               ],
             ],

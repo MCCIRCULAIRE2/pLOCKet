@@ -83,8 +83,14 @@ class OcrService {
   Future<String> extractTextFromBytes(Uint8List bytes, String name) async {
     final ext = name.split('.').last.toLowerCase();
     debugPrint('[OCR] ÉTAPE 3 - Détection type : $ext');
+    
+    if (_isImage(ext)) {
+      debugPrint('[OCR] ÉTAPE 4b - Extraction image (depuis bytes) : début');
+      return await extractTextFromImageBytes(bytes);
+    }
+    
     if (ext != 'pdf') {
-      debugPrint('[OCR] ÉTAPE 4b - Extraction : NON (type image depuis bytes, non supporté)');
+      debugPrint('[OCR] ÉTAPE 4b - Extraction : NON (type inconnu: $ext)');
       return '';
     }
 
@@ -122,6 +128,10 @@ class OcrService {
       debugPrint('[OCR] ÉTAPE 4 - Texte extrait :\n$text');
     }
     return text;
+  }
+
+  bool _isImage(String ext) {
+    return ['jpg', 'jpeg', 'png', 'heic', 'webp', 'gif', 'bmp'].contains(ext.toLowerCase());
   }
 
   String _extractPdfText(Uint8List bytes) {

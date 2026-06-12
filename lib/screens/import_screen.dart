@@ -61,6 +61,14 @@ class _ImportScreenState extends State<ImportScreen> {
     final mimeType = _mimeFromExtension(ext);
     final isImage = _isImage(ext);
 
+    print('[IMPORT FILE] ═══════════════════════════════════════════════════════════');
+    print('[IMPORT FILE] Nom: ${file.name}');
+    print('[IMPORT FILE] Extension: $ext');
+    print('[IMPORT FILE] MIME type: $mimeType');
+    print('[IMPORT FILE] Taille: ${file.size} octets');
+    print('[IMPORT FILE] Type: ${isImage ? "IMAGE" : "PDF"}');
+    print('[IMPORT FILE] ═══════════════════════════════════════════════════════════');
+
     String ocrText;
     final swOcr = Stopwatch()..start();
 
@@ -69,25 +77,36 @@ class _ImportScreenState extends State<ImportScreen> {
 
     try {
       if (kIsWeb && sourceBytes != null) {
-        debugPrint('[IMPORT] ÉTAPE 3b - Source : bytes mémoire (${sourceBytes.length} octets, web)');
+        print('[IMPORT] ÉTAPE 3b - Source : bytes mémoire (${sourceBytes.length} octets, web)');
         ocrText = await _ocr.extractTextFromBytes(sourceBytes, file.name);
       } else if (file.path != null) {
-        debugPrint('[IMPORT] ÉTAPE 3b - Source : fichier disque (${file.path})');
+        print('[IMPORT] ÉTAPE 3b - Source : fichier disque (${file.path})');
         if (isImage) {
           ocrText = await _ocr.extractTextFromImage(file.path!);
         } else {
           ocrText = await _ocr.extractTextFromPdf(file.path!);
         }
       } else if (file.bytes != null) {
-        debugPrint('[IMPORT] ÉTAPE 3b - Source : bytes mémoire (${file.bytes!.length} octets)');
+        print('[IMPORT] ÉTAPE 3b - Source : bytes mémoire (${file.bytes!.length} octets)');
         ocrText = await _ocr.extractTextFromBytes(file.bytes!, file.name);
       } else {
         ocrText = '';
       }
     } catch (e) {
-      debugPrint('[IMPORT] ÉTAPE 4/5 - Extraction/OCR : EXCEPTION — $e');
+      print('[IMPORT] ÉTAPE 4/5 - Extraction/OCR : EXCEPTION — $e');
       ocrText = '';
     }
+
+    print('[OCR RESULT] ═══════════════════════════════════════════════════════════');
+    print('[OCR RESULT] Nombre de caractères: ${ocrText.length}');
+    if (ocrText.length > 500) {
+      print('[OCR RESULT] 500 premiers caractères:\n${ocrText.substring(0, 500)}');
+    } else if (ocrText.isNotEmpty) {
+      print('[OCR RESULT] Texte complet:\n$ocrText');
+    } else {
+      print('[OCR RESULT] ❌ AUCUN TEXTE EXTRAIT');
+    }
+    print('[OCR RESULT] ═══════════════════════════════════════════════════════════');
 
     final success = ocrText.isNotEmpty;
     StepLogger.log('ÉTAPE 4/5 - Extraction contenu${isImage ? ' / OCR' : ''}', success, swOcr.elapsedMilliseconds,
@@ -109,7 +128,11 @@ class _ImportScreenState extends State<ImportScreen> {
       return;
     }
 
-    setState(() => _statusText = 'Création de la fiche...');
+    setState(() => _statusText = 'Extraction des champs...');
+
+    print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
+    print('[FIELD EXTRACTION] Démarrage extraction de champs');
+    print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
 
     final cardProvider = context.read<CardProvider>();
     final swPipe = Stopwatch()..start();
@@ -123,6 +146,17 @@ class _ImportScreenState extends State<ImportScreen> {
       sourceFileExtension: ext,
       sourceBytes: sourceBytes,
     );
+
+    if (draft != null) {
+      print('[FIELD EXTRACTION] ✓ ${draft.fields.length} champ(s) extrait(s)');
+      for (final field in draft.fields.entries) {
+        print('[FIELD EXTRACTION]   ${field.key} = ${field.value.rawValue}');
+      }
+    } else {
+      print('[FIELD EXTRACTION] ❌ Échec extraction');
+    }
+    print('[FIELD EXTRACTION] ═══════════════════════════════════════════════════════════');
+
     final analyzed = draft != null;
     StepLogger.log('ÉTAPE 6-8 - Analyse/Classification/Extraction', analyzed, swPipe.elapsedMilliseconds,
         error: analyzed ? '${draft!.fields.length} champs' : (cardProvider.error ?? 'null'));
