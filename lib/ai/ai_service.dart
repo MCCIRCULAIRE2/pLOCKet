@@ -36,6 +36,7 @@ class AnswerResult {
   final String? justification;
   final List<String> sourceCardIds;
   final List<String> sourceTitles;
+  final List<AnswerValue> values;
 
   AnswerResult({
     required this.answerText,
@@ -46,8 +47,22 @@ class AnswerResult {
     this.justification,
     List<String>? sourceCardIds,
     List<String>? sourceTitles,
+    List<AnswerValue>? values,
   })  : sourceCardIds = sourceCardIds ?? (sourceCardId != null ? [sourceCardId] : []),
-        sourceTitles = sourceTitles ?? (sourceTitle != null ? [sourceTitle] : []);
+        sourceTitles = sourceTitles ?? (sourceTitle != null ? [sourceTitle] : []),
+        values = values ?? [];
+}
+
+class AnswerValue {
+  final String label;
+  final String value;
+  final String? sourceCardId;
+
+  AnswerValue({
+    required this.label,
+    required this.value,
+    this.sourceCardId,
+  });
 }
 
 abstract class AIService {

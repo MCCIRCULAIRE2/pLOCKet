@@ -1779,6 +1779,7 @@ class FallbackAIService implements AIService {
     // Chercher les fiches correspondantes
     final matchingCards = <CardModel>[];
     final results = <String>[];
+    final answerValues = <AnswerValue>[];
     
     for (final entity in groupEntities) {
       final entityLower = entity.toLowerCase();
@@ -1812,6 +1813,11 @@ class FallbackAIService implements AIService {
           final fieldValue = _extractRequestedField(card, analyzed.intent);
           if (fieldValue != null) {
             results.add('• $entity : $fieldValue');
+            answerValues.add(AnswerValue(
+              label: entity,
+              value: fieldValue,
+              sourceCardId: card.id,
+            ));
           } else {
             results.add('• $entity : information non disponible');
           }
@@ -1834,6 +1840,7 @@ class FallbackAIService implements AIService {
       confidence: 'Fort',
       sourceCardIds: matchingCards.map((c) => c.id).toList(),
       sourceTitles: matchingCards.map((c) => c.title).toList(),
+      values: answerValues,
     );
   }
   

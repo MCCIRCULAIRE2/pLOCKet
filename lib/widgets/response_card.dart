@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../ai/ai_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -57,12 +58,37 @@ class ResponseCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
                   border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.15)),
                 ),
-                child: Text(
-                  result.answerText,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    height: 1.5,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      result.answerText,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: result.answerText));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Réponse copiée'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('Copier la réponse'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (result.extractedValue != null) ...[
@@ -87,7 +113,108 @@ class ResponseCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 16),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: result.extractedValue!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Valeur copiée'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Copier',
+                      ),
                     ],
+                  ),
+                ),
+              ],
+              if (result.values.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Valeurs extraites',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ...result.values.map((answerValue) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface2,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                        border: Border.all(color: AppColors.borderLight),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  answerValue.label,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                SelectableText(
+                                  answerValue.value,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.copy, size: 16),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: answerValue.value));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('${answerValue.label} copié'),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Copier',
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final allValues = result.values
+                          .map((v) => '${v.label}: ${v.value}')
+                          .join('\n');
+                      Clipboard.setData(ClipboardData(text: allValues));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Toutes les valeurs copiées'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_all, size: 16),
+                    label: const Text('Copier toutes les valeurs'),
                   ),
                 ),
               ],
