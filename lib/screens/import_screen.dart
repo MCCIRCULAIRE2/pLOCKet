@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/ocr_service.dart';
+import '../services/document_scanner_service.dart';
 import '../providers/card_provider.dart';
 import '../services/step_logger.dart';
 import '../theme/app_colors.dart';
@@ -18,6 +20,7 @@ class ImportScreen extends StatefulWidget {
 
 class _ImportScreenState extends State<ImportScreen> {
   final OcrService _ocr = OcrService();
+  final DocumentScannerService _scanner = DocumentScannerService();
   bool _isProcessing = false;
   String _statusText = '';
 
@@ -78,17 +81,83 @@ class _ImportScreenState extends State<ImportScreen> {
     try {
       if (kIsWeb && sourceBytes != null) {
         print('[IMPORT] ÉTAPE 3b - Source : bytes mémoire (${sourceBytes.length} octets, web)');
-        ocrText = await _ocr.extractTextFromBytes(sourceBytes, file.name);
+        
+        // PRÉTRAITEMENT POUR IMAGES UNIQUEMENT
+        Uint8List bytesForOcr = sourceBytes;
+        if (isImage) {
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          print('[PREPROCESS] Démarrage prétraitement documentaire (image)');
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          
+          setState(() {
+            _statusText = 'Prétraitement de l\'image...';
+          });
+          
+          final preprocessSw = Stopwatch()..start();
+          bytesForOcr = await _scanner.preprocessImage(sourceBytes);
+          final preprocessElapsed = preprocessSw.elapsedMilliseconds;
+          
+          print('[PREPROCESS] ✓ Prétraitement terminé en ${preprocessElapsed}ms');
+          print('[PREPROCESS] Taille originale: ${sourceBytes.length} octets');
+          print('[PREPROCESS] Taille prétraitée: ${bytesForOcr.length} octets');
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+        }
+        
+        ocrText = await _ocr.extractTextFromBytes(bytesForOcr, file.name);
       } else if (file.path != null) {
         print('[IMPORT] ÉTAPE 3b - Source : fichier disque (${file.path})');
         if (isImage) {
-          ocrText = await _ocr.extractTextFromImage(file.path!);
+          // PRÉTRAITEMENT POUR IMAGES UNIQUEMENT (natif)
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          print('[PREPROCESS] Démarrage prétraitement documentaire (image native)');
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          
+          setState(() {
+            _statusText = 'Prétraitement de l\'image...';
+          });
+          
+          // Lire les bytes du fichier
+          final fileBytes = await File(file.path!).readAsBytes();
+          final preprocessSw = Stopwatch()..start();
+          final processedBytes = await _scanner.preprocessImage(fileBytes);
+          final preprocessElapsed = preprocessSw.elapsedMilliseconds;
+          
+          print('[PREPROCESS] ✓ Prétraitement terminé en ${preprocessElapsed}ms');
+          print('[PREPROCESS] Taille originale: ${fileBytes.length} octets');
+          print('[PREPROCESS] Taille prétraitée: ${processedBytes.length} octets');
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          
+          // Utiliser les bytes prétraités pour l'OCR
+          ocrText = await _ocr.extractTextFromImageBytes(processedBytes);
         } else {
+          // PDF : pas de prétraitement
           ocrText = await _ocr.extractTextFromPdf(file.path!);
         }
       } else if (file.bytes != null) {
         print('[IMPORT] ÉTAPE 3b - Source : bytes mémoire (${file.bytes!.length} octets)');
-        ocrText = await _ocr.extractTextFromBytes(file.bytes!, file.name);
+        
+        // PRÉTRAITEMENT POUR IMAGES UNIQUEMENT
+        Uint8List bytesForOcr = file.bytes!;
+        if (isImage) {
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          print('[PREPROCESS] Démarrage prétraitement documentaire (image)');
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+          
+          setState(() {
+            _statusText = 'Prétraitement de l\'image...';
+          });
+          
+          final preprocessSw = Stopwatch()..start();
+          bytesForOcr = await _scanner.preprocessImage(file.bytes!);
+          final preprocessElapsed = preprocessSw.elapsedMilliseconds;
+          
+          print('[PREPROCESS] ✓ Prétraitement terminé en ${preprocessElapsed}ms');
+          print('[PREPROCESS] Taille originale: ${file.bytes!.length} octets');
+          print('[PREPROCESS] Taille prétraitée: ${bytesForOcr.length} octets');
+          print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+        }
+        
+        ocrText = await _ocr.extractTextFromBytes(bytesForOcr, file.name);
       } else {
         ocrText = '';
       }

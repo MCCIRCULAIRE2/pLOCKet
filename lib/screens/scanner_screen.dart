@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/ocr_service.dart';
+import '../services/document_scanner_service.dart';
 import '../providers/card_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -18,6 +19,7 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   final ImagePicker _picker = ImagePicker();
   final OcrService _ocr = OcrService();
+  final DocumentScannerService _scanner = DocumentScannerService();
   bool _isProcessing = false;
   String _statusText = '';
 
@@ -68,8 +70,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
     
     print('[SCAN] ═══════════════════════════════════════════════════════════');
 
+    // PRÉTRAITEMENT DOCUMENTAIRE
+    print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+    print('[PREPROCESS] Démarrage prétraitement documentaire');
+    print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+    
+    setState(() {
+      _statusText = 'Prétraitement de l\'image...';
+    });
+    
+    final preprocessSw = Stopwatch()..start();
+    final processedBytes = await _scanner.preprocessImage(bytes);
+    final preprocessElapsed = preprocessSw.elapsedMilliseconds;
+    
+    print('[PREPROCESS] ✓ Prétraitement terminé en ${preprocessElapsed}ms');
+    print('[PREPROCESS] Taille originale: ${bytes.length} octets');
+    print('[PREPROCESS] Taille prétraitée: ${processedBytes.length} octets');
+    print('[PREPROCESS] ═══════════════════════════════════════════════════════════');
+
     print('[BEFORE OCR] ═══════════════════════════════════════════════════════════');
-    print('[BEFORE OCR] Taille envoyée à OCR: ${bytes.length} octets');
+    print('[BEFORE OCR] Taille envoyée à OCR: ${processedBytes.length} octets');
     print('[BEFORE OCR] ═══════════════════════════════════════════════════════════');
 
     print('[OCR IMAGE] ═══════════════════════════════════════════════════════════');
@@ -80,10 +100,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
     String ocrText;
     
     if (kIsWeb) {
-      // Sur web, utiliser les bytes
-      ocrText = await _ocr.extractTextFromImageBytes(bytes);
+      // Sur web, utiliser les bytes prétraités
+      ocrText = await _ocr.extractTextFromImageBytes(processedBytes);
     } else {
-      // Sur natif, utiliser le path
+      // Sur natif, utiliser le path (pas de prétraitement sur natif pour l'instant)
       ocrText = await _ocr.extractTextFromImage(xFile.path);
     }
     
