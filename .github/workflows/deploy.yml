@@ -32,7 +32,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter Web
-        run: flutter build web --release --base-href /plocket/
+        run: flutter build web --release --base-href /pLOCKet/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
