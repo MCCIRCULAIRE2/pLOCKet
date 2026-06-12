@@ -1,5 +1,6 @@
 import '../ai/ai_service.dart';
 import '../ai/fallback_ai_service.dart';
+import '../ai/semantic_relation_engine.dart';
 import '../models/card_model.dart';
 import '../models/analytical_field.dart';
 import '../database/daos/card_dao.dart';
@@ -32,11 +33,59 @@ class QaEngine {
     print('[QA] Valeurs analytiques: ${analyticalValues.length}');
     print('[QA] ═══════════════════════════════════════════════════════════');
     
+    // Utiliser le moteur de relations sémantiques
+    final semanticResults = SemanticRelationEngine.findEntitiesBySemanticQuery(
+      question,
+      analyticalFields,
+      analyticalValues,
+    );
+    
+    if (semanticResults.isNotEmpty) {
+      print('[QA] ${semanticResults.length} entité(s) trouvée(s) par relation sémantique');
+      
+      // Construire la réponse
+      final answerText = _buildSemanticAnswer(question, semanticResults);
+      
+      return AnswerResult(
+        answerText: answerText,
+        confidence: 'Fort',
+        values: semanticResults.map((v) => AnswerValue(
+          label: v.label,
+          value: v.label,
+        )).toList(),
+      );
+    }
+    
     return await _ai.answerQuestion(
       question, 
       allCards,
       analyticalData: _buildAnalyticalData(analyticalFields, analyticalValues),
     );
+  }
+
+  String _buildSemanticAnswer(String question, List<AnalyticalValue> results) {
+    final questionLower = question.toLowerCase();
+    
+    // Déterminer le type d'information demandée
+    String infoType = 'information';
+    if (questionLower.contains('numéro de sécurité sociale') || questionLower.contains('numéro de sécu')) {
+      infoType = 'numéro de sécurité sociale';
+    } else if (questionLower.contains('adresse')) {
+      infoType = 'adresse';
+    } else if (questionLower.contains('téléphone') || questionLower.contains('téléphone')) {
+      infoType = 'téléphone';
+    } else if (questionLower.contains('email') || questionLower.contains('e-mail')) {
+      infoType = 'email';
+    }
+    
+    final buffer = StringBuffer();
+    buffer.writeln('${results.length} résultat(s) trouvé(s) :\n');
+    
+    for (final result in results) {
+      buffer.writeln('• ${result.label}');
+    }
+    
+    return buffer.toString();
   }
 
   Future<List<CardModel>> searchCards(String query) async {

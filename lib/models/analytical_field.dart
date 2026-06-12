@@ -36,6 +36,9 @@ class AnalyticalValue {
   final String label;
   final List<String> aliases;
   final Map<String, String> identifiers;
+  final String? role;
+  final String? category;
+  final String? relation;
   final DateTime createdAt;
 
   AnalyticalValue({
@@ -44,6 +47,9 @@ class AnalyticalValue {
     required this.label,
     List<String>? aliases,
     Map<String, String>? identifiers,
+    this.role,
+    this.category,
+    this.relation,
     DateTime? createdAt,
   })  : aliases = aliases ?? [],
         identifiers = identifiers ?? {},
@@ -55,6 +61,9 @@ class AnalyticalValue {
         'label': label,
         'aliases': jsonEncode(aliases),
         'identifiers': jsonEncode(identifiers),
+        'role': role,
+        'category': category,
+        'relation': relation,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -68,6 +77,9 @@ class AnalyticalValue {
         identifiers: map['identifiers'] != null
             ? Map<String, String>.from(jsonDecode(map['identifiers'] as String))
             : {},
+        role: map['role'] as String?,
+        category: map['category'] as String?,
+        relation: map['relation'] as String?,
         createdAt: map['createdAt'] != null
             ? DateTime.parse(map['createdAt'] as String)
             : null,
@@ -77,6 +89,9 @@ class AnalyticalValue {
     String? label,
     List<String>? aliases,
     Map<String, String>? identifiers,
+    String? role,
+    String? category,
+    String? relation,
   }) =>
       AnalyticalValue(
         id: id,
@@ -84,6 +99,9 @@ class AnalyticalValue {
         label: label ?? this.label,
         aliases: aliases ?? this.aliases,
         identifiers: identifiers ?? this.identifiers,
+        role: role ?? this.role,
+        category: category ?? this.category,
+        relation: relation ?? this.relation,
         createdAt: createdAt,
       );
 }

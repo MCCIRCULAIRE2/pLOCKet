@@ -92,6 +92,9 @@ class AnalyticalFieldProvider extends ChangeNotifier {
     required String label,
     List<String>? aliases,
     Map<String, String>? identifiers,
+    String? role,
+    String? category,
+    String? relation,
   }) async {
     final value = AnalyticalValue(
       id: _uuid.v4(),
@@ -99,6 +102,9 @@ class AnalyticalFieldProvider extends ChangeNotifier {
       label: label,
       aliases: aliases,
       identifiers: identifiers,
+      role: role,
+      category: category,
+      relation: relation,
     );
     await _dao.insertValue(value);
     await loadAll();

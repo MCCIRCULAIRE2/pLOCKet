@@ -338,8 +338,19 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
   }
 
   String _displayFieldValue(dynamic value) {
+    // Si c'est un Map (TypedField encodé), extraire la valeur 'v'
     if (value is Map<String, dynamic>) {
-      return value['v']?.toString() ?? value.toString();
+      // Extraire la valeur 'v' si elle existe
+      if (value.containsKey('v')) {
+        return value['v']?.toString() ?? '';
+      }
+      // Fallback: afficher la première valeur non-nulle
+      for (final entry in value.entries) {
+        if (entry.value != null && entry.key != 't' && entry.key != 'nr' && entry.key != 'vu') {
+          return entry.value.toString();
+        }
+      }
+      return '';
     }
     return value.toString();
   }

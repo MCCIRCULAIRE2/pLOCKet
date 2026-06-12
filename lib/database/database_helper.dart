@@ -55,7 +55,7 @@ class DatabaseHelper {
       final db = await databaseFactoryFfi.openDatabase(
         dbPath,
         options: OpenDatabaseOptions(
-          version: 3,
+          version: 4,
           onCreate: (db, version) async {
             debugPrint('[DB INIT] Création du schéma (version $version)...');
             await _onCreate(db, version);
@@ -113,6 +113,11 @@ class DatabaseHelper {
           createdAt TEXT NOT NULL
         )
       ''');
+    }
+    if (oldVersion < 4) {
+      await adapter.execute('ALTER TABLE analytical_values ADD COLUMN role TEXT');
+      await adapter.execute('ALTER TABLE analytical_values ADD COLUMN category TEXT');
+      await adapter.execute('ALTER TABLE analytical_values ADD COLUMN relation TEXT');
     }
   }
 
@@ -226,6 +231,9 @@ class DatabaseHelper {
         label TEXT NOT NULL,
         aliases TEXT,
         identifiers TEXT,
+        role TEXT,
+        category TEXT,
+        relation TEXT,
         createdAt TEXT NOT NULL
       )
     ''');

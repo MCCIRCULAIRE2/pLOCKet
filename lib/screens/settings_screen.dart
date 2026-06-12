@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../models/analytical_field.dart';
 import '../providers/analytical_field_provider.dart';
 import '../providers/user_profile_provider.dart';
+import '../ai/semantic_relation_engine.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/glass_card.dart';
@@ -318,6 +319,12 @@ class _FieldCard extends StatelessWidget {
     final labelController = TextEditingController();
     final aliasController = TextEditingController();
     final aliases = <String>[];
+    String? selectedRelation;
+    String? selectedCategory;
+    String? selectedRole;
+
+    // Obtenir les suggestions de relations pour ce type de champ
+    final relationSuggestions = SemanticRelationEngine.getRelationSuggestions(field.name);
 
     showAdaptiveModalDialog(
       context: context,
@@ -382,6 +389,33 @@ class _FieldCard extends StatelessWidget {
                         .toList(),
                   ),
                 ],
+                if (relationSuggestions.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: selectedRelation,
+                    decoration: const InputDecoration(
+                      labelText: 'Relation / Catégorie',
+                      hintText: 'Ex: conjoint, enfant, résidence principale...',
+                    ),
+                    items: relationSuggestions.map((r) => DropdownMenuItem(
+                      value: r,
+                      child: Text(r),
+                    )).toList(),
+                    onChanged: (v) {
+                      setDialogState(() {
+                        selectedRelation = v;
+                        // Déterminer si c'est une relation, catégorie ou rôle
+                        if (['conjoint', 'enfant', 'fils', 'fille', 'parent', 'frère', 'soeur', 'ami', 'collègue'].contains(v)) {
+                          selectedCategory = null;
+                          selectedRole = v;
+                        } else {
+                          selectedCategory = v;
+                          selectedRole = null;
+                        }
+                      });
+                    },
+                  ),
+                ],
               ],
             ),
           );
@@ -400,6 +434,9 @@ class _FieldCard extends StatelessWidget {
                 fieldId: field.id,
                 label: label,
                 aliases: aliases,
+                role: selectedRole,
+                category: selectedCategory,
+                relation: selectedRelation,
               );
               Navigator.pop(context);
             }
