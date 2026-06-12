@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'pdf_ocr_stub.dart'
     if (dart.library.js) 'pdf_ocr_web.dart';
+import 'image_ocr_stub.dart'
+    if (dart.library.js) 'image_ocr_web.dart';
 
 class OcrService {
   static final RegExp _pdfShowString =
@@ -14,7 +16,9 @@ class OcrService {
 
   Future<String> extractTextFromImage(String imagePath) async {
     if (kIsWeb) {
-      debugPrint('[OCR] ÉTAPE 5a - OCR image : NON (web)');
+      debugPrint('[OCR] ÉTAPE 5a - OCR image Web : début');
+      // Sur web, on ne peut pas utiliser le path, on doit utiliser les bytes
+      // Cette méthode sera appelée avec les bytes depuis scanner_screen
       return '';
     }
     final sw = Stopwatch()..start();
@@ -32,6 +36,25 @@ class OcrService {
       }
     } catch (e) {
       debugPrint('[OCR] ÉTAPE 5a - OCR image : ÉCHEC — $e [${sw.elapsedMilliseconds}ms]');
+      return '';
+    }
+  }
+
+  Future<String> extractTextFromImageBytes(Uint8List imageBytes) async {
+    if (!kIsWeb) {
+      debugPrint('[OCR] ÉTAPE 5b - OCR image bytes : NON (plateforme native)');
+      return '';
+    }
+    
+    debugPrint('[OCR] ÉTAPE 5b - OCR image Web : début (${imageBytes.length} octets)');
+    final sw = Stopwatch()..start();
+    
+    try {
+      final text = await extractTextFromImageWeb(imageBytes);
+      debugPrint('[OCR] ÉTAPE 5b - OCR image Web : SUCCÈS (${text.length} car.) [${sw.elapsedMilliseconds}ms]');
+      return text;
+    } catch (e) {
+      debugPrint('[OCR] ÉTAPE 5b - OCR image Web : ÉCHEC — $e [${sw.elapsedMilliseconds}ms]');
       return '';
     }
   }

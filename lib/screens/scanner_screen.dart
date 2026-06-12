@@ -30,23 +30,53 @@ class _ScannerScreenState extends State<ScannerScreen> {
       _statusText = 'Analyse de l\'image...';
     });
 
-    print('[PHOTO OCR] ═══════════════════════════════════════════════════════════');
-    print('[PHOTO OCR] Début OCR photo');
-    print('[PHOTO OCR] Fichier: ${xFile.path}');
-    print('[PHOTO OCR] ═══════════════════════════════════════════════════════════');
-
-    final ocrText = await _ocr.extractTextFromImage(xFile.path);
-
-    print('[TEXT EXTRACTED] ═══════════════════════════════════════════════════════════');
-    print('[TEXT EXTRACTED] Nombre de caractères: ${ocrText.length}');
-    if (ocrText.length > 500) {
-      print('[TEXT EXTRACTED] 500 premiers caractères:\n${ocrText.substring(0, 500)}');
-    } else if (ocrText.isNotEmpty) {
-      print('[TEXT EXTRACTED] Texte complet:\n$ocrText');
-    } else {
-      print('[TEXT EXTRACTED] ⚠ Aucun texte extrait');
+    print('[PHOTO] ═══════════════════════════════════════════════════════════');
+    print('[PHOTO] Début traitement photo');
+    print('[PHOTO] Fichier: ${xFile.path}');
+    print('[PHOTO] Nom: ${xFile.name}');
+    print('[PHOTO] MIME type: ${xFile.mimeType ?? "non spécifié"}');
+    
+    // Obtenir la taille du fichier
+    try {
+      final bytes = await xFile.readAsBytes();
+      print('[PHOTO] Taille: ${bytes.length} octets (${(bytes.length / 1024).toStringAsFixed(1)} KB)');
+    } catch (e) {
+      print('[PHOTO] ⚠ Impossible de lire la taille: $e');
     }
-    print('[TEXT EXTRACTED] ═══════════════════════════════════════════════════════════');
+    
+    print('[PHOTO] ═══════════════════════════════════════════════════════════');
+
+    print('[OCR IMAGE] ═══════════════════════════════════════════════════════════');
+    print('[OCR IMAGE] Démarrage OCR');
+    print('[OCR IMAGE] Plateforme: ${kIsWeb ? "Web" : "Native"}');
+    
+    final sw = Stopwatch()..start();
+    String ocrText;
+    
+    if (kIsWeb) {
+      // Sur web, utiliser les bytes
+      final bytes = await xFile.readAsBytes();
+      ocrText = await _ocr.extractTextFromImageBytes(bytes);
+    } else {
+      // Sur natif, utiliser le path
+      ocrText = await _ocr.extractTextFromImage(xFile.path);
+    }
+    
+    final elapsed = sw.elapsedMilliseconds;
+    
+    print('[OCR IMAGE] Temps d\'exécution: ${elapsed}ms');
+    print('[OCR IMAGE] ═══════════════════════════════════════════════════════════');
+
+    print('[OCR RESULT] ═══════════════════════════════════════════════════════════');
+    print('[OCR RESULT] Nombre de caractères: ${ocrText.length}');
+    if (ocrText.length > 500) {
+      print('[OCR RESULT] 500 premiers caractères:\n${ocrText.substring(0, 500)}');
+    } else if (ocrText.isNotEmpty) {
+      print('[OCR RESULT] Texte complet:\n$ocrText');
+    } else {
+      print('[OCR RESULT] ❌ AUCUN TEXTE EXTRAIT');
+    }
+    print('[OCR RESULT] ═══════════════════════════════════════════════════════════');
 
     setState(() => _statusText = 'Analyse du document...');
 
