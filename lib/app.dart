@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'providers/auth_provider.dart';
 import 'providers/card_provider.dart';
 import 'providers/document_provider.dart';
 import 'providers/tag_provider.dart';
@@ -11,6 +12,7 @@ import 'providers/analytical_field_provider.dart';
 import 'providers/user_profile_provider.dart';
 import 'services/update_service.dart';
 import 'screens/splash_screen.dart';
+import 'screens/login_screen.dart';
 import 'theme/app_theme.dart';
 
 class PLocketApp extends StatelessWidget {
@@ -20,6 +22,7 @@ class PLocketApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => UpdateService()),
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),
         ChangeNotifierProvider(create: (_) => DocumentProvider()),
@@ -41,7 +44,19 @@ class PLocketApp extends StatelessWidget {
         title: 'pLOCKet',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
-        home: const SplashScreen(),
+        home: Consumer<AuthProvider>(
+          builder: (context, auth, _) {
+            if (auth.status == AuthStatus.unknown) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (auth.isAuthenticated) {
+              return const SplashScreen();
+            }
+            return const LoginScreen();
+          },
+        ),
       ),
     );
   }

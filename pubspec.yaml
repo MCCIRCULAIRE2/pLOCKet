@@ -48,6 +48,7 @@ dependencies:
   device_info_plus_platform_interface: ^7.0.2
   web: ^1.1.0
   image: ^4.5.3
+  supabase_flutter: ^2.8.4
 dev_dependencies:
   flutter_test:
     sdk: flutter
