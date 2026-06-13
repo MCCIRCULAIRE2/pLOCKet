@@ -38,18 +38,7 @@ jobs:
         run: |
           cd build/web
           TIMESTAMP=$(date +%s)
-          # Injecter la version dans sw.js
           sed -i "s/__BUILD_VERSION__/$TIMESTAMP/g" sw.js
-          # Renommer les fichiers JS avec timestamp
-          if [ -f main.dart.js ]; then
-            mv main.dart.js main.dart.js?v=$TIMESTAMP
-          fi
-          if [ -f flutter.js ]; then
-            mv flutter.js flutter.js?v=$TIMESTAMP
-          fi
-          # Mettre à jour les références dans index.html
-          sed -i "s/main.dart.js/main.dart.js?v=$TIMESTAMP/g" index.html
-          sed -i "s/flutter.js/flutter.js?v=$TIMESTAMP/g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
