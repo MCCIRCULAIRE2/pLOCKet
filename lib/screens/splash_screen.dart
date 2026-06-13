@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/card_provider.dart';
+import '../services/data_migration_service.dart';
 import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -56,6 +59,8 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _startAnimation() async {
+    _runMigrationIfCloud();
+
     await Future.delayed(const Duration(milliseconds: 400));
     await _lockController.forward();
     await Future.delayed(const Duration(milliseconds: 400));
@@ -70,6 +75,25 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       );
     }
+  }
+
+  void _runMigrationIfCloud() {
+    try {
+      final cardProvider = context.read<CardProvider>();
+      if (!cardProvider.useCloud) return;
+
+      DataMigrationService().migrateCardsToCloud().then((result) {
+        if (result.success && result.migrated > 0 && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${result.migrated} fiche(s) migrée(s) vers le cloud'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          cardProvider.loadCards();
+        }
+      });
+    } catch (_) {}
   }
 
   @override

@@ -10,6 +10,7 @@ import '../ai/fallback_ai_service.dart';
 import '../ai/contextual_suggestion_engine.dart';
 import '../services/content_pipeline.dart';
 import '../services/qa_engine.dart';
+import '../services/cloud_repository.dart';
 import '../database/daos/card_dao.dart';
 import '../database/daos/document_dao.dart';
 import '../models/document.dart';
@@ -18,11 +19,13 @@ import '../models/document.dart';
 class CardProvider extends ChangeNotifier {
   final CardDao _cardDao = CardDao();
   final DocumentDao _documentDao = DocumentDao();
+  final CloudRepository _cloudRepo = CloudRepository();
+  final bool useCloud;
   late final ContentPipeline _pipeline;
   late final QaEngine _qa;
   final Uuid _uuid = Uuid();
 
-  CardProvider({AIService? ai}) {
+  CardProvider({AIService? ai, this.useCloud = false}) {
     final service = ai ?? FallbackAIService();
     _pipeline = ContentPipeline(ai: service);
     _qa = QaEngine(ai: service);
@@ -48,12 +51,16 @@ class CardProvider extends ChangeNotifier {
 
   Future<void> loadCards() async {
     debugPrint('[CARDS LOAD] ═══════════════════════════════════════════════════════════');
-    debugPrint('[CARDS LOAD] Début chargement des fiches');
+    debugPrint('[CARDS LOAD] Début chargement des fiches (mode: ${useCloud ? "cloud" : "local"})');
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      _cards = await _cardDao.getAll();
+      if (useCloud) {
+        _cards = await _cloudRepo.getAllCards();
+      } else {
+        _cards = await _cardDao.getAll();
+      }
       debugPrint('[CARDS LOAD] ✓ ${_cards.length} fiche(s) chargée(s)');
       for (final card in _cards) {
         debugPrint('[CARDS LOAD]   - ${card.title} (id: ${card.id})');
@@ -110,7 +117,11 @@ class CardProvider extends ChangeNotifier {
       // Si la fiche a été modifiée, la sauvegarder
       if (cardUpdated) {
         final updatedCard = card.copyWith(fields: updatedFields);
-        await _cardDao.update(updatedCard);
+        if (useCloud) {
+          await _cloudRepo.updateCard(updatedCard);
+        } else {
+          await _cardDao.update(updatedCard);
+        }
         updatedCount++;
       }
     }
@@ -118,7 +129,6 @@ class CardProvider extends ChangeNotifier {
     debugPrint('[CARDS UPDATE] ✓ $updatedCount fiche(s) mise(s) à jour');
     debugPrint('[CARDS UPDATE] ═══════════════════════════════════════════════════════════');
     
-    // Recharger les fiches pour refléter les changements
     await loadCards();
   }
 
@@ -153,7 +163,11 @@ class CardProvider extends ChangeNotifier {
 
       if (cardUpdated) {
         final updatedCard = card.copyWith(fields: updatedFields);
-        await _cardDao.update(updatedCard);
+        if (useCloud) {
+          await _cloudRepo.updateCard(updatedCard);
+        } else {
+          await _cardDao.update(updatedCard);
+        }
         updatedCount++;
       }
     }
@@ -368,10 +382,14 @@ class CardProvider extends ChangeNotifier {
       debugPrint('[SAVE] sourceData length = ${sourceData?.length ?? 0}');
       debugPrint('[SAVE] bytes length = ${rawBytes?.length ?? 0}');
       
-      // Pour une mise à jour, récupérer l'ancienne fiche pour conserver le sourceDocumentId
       String? sourceDocumentId;
       if (isUpdate) {
-        final existingCard = await _cardDao.getById(existingCardId);
+        CardModel? existingCard;
+        if (useCloud) {
+          existingCard = await _cloudRepo.getCardById(existingCardId);
+        } else {
+          existingCard = await _cardDao.getById(existingCardId);
+        }
         if (existingCard != null) {
           sourceDocumentId = existingCard.sourceDocumentId;
           debugPrint('[SAVE] Conservation du document source: $sourceDocumentId');
@@ -396,11 +414,19 @@ class CardProvider extends ChangeNotifier {
       );
       
       if (isUpdate) {
-        await _cardDao.update(card);
-        debugPrint('[SAVE] ✓ Fiche mise à jour en base de données');
+        if (useCloud) {
+          await _cloudRepo.updateCard(card);
+        } else {
+          await _cardDao.update(card);
+        }
+        debugPrint('[SAVE] ✓ Fiche mise à jour (${useCloud ? "cloud" : "local"})');
       } else {
-        await _cardDao.insert(card);
-        debugPrint('[SAVE] ✓ Fiche insérée en base de données');
+        if (useCloud) {
+          await _cloudRepo.insertCard(card);
+        } else {
+          await _cardDao.insert(card);
+        }
+        debugPrint('[SAVE] ✓ Fiche insérée (${useCloud ? "cloud" : "local"})');
       }
 
       // Sauvegarder le document lié seulement si c'est une nouvelle fiche
@@ -493,7 +519,11 @@ class CardProvider extends ChangeNotifier {
 
   Future<void> selectCard(String id) async {
     try {
-      _selectedCard = await _cardDao.getById(id);
+      if (useCloud) {
+        _selectedCard = await _cloudRepo.getCardById(id);
+      } else {
+        _selectedCard = await _cardDao.getById(id);
+      }
     } catch (e) {
       _error = 'Erreur sélection: $e';
     }
@@ -502,7 +532,11 @@ class CardProvider extends ChangeNotifier {
 
   Future<void> deleteCard(String id) async {
     try {
-      await _cardDao.delete(id);
+      if (useCloud) {
+        await _cloudRepo.deleteCard(id);
+      } else {
+        await _cardDao.delete(id);
+      }
       await loadCards();
     } catch (e) {
       _error = 'Erreur suppression: $e';
@@ -512,7 +546,11 @@ class CardProvider extends ChangeNotifier {
 
   Future<List<CardModel>> search(String query) async {
     try {
-      return await _cardDao.search(query);
+      if (useCloud) {
+        return await _cloudRepo.searchCards(query);
+      } else {
+        return await _cardDao.search(query);
+      }
     } catch (e) {
       _error = 'Erreur recherche: $e';
       return [];
