@@ -32,7 +32,13 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter Web
-        run: flutter build web --release --base-href /pLOCKet/ --dart-define=BUILD_VERSION=${{ github.run_number }}
+        run: |
+          flutter build web --release \
+            --base-href /pLOCKet/ \
+            --dart-define=BUILD_VERSION=${{ github.run_number }} \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=USE_CLOUD=${{ vars.USE_CLOUD || 'false' }}
 
       - name: Inject version into Service Worker
         run: |

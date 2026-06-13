@@ -18,6 +18,8 @@ import 'theme/app_theme.dart';
 class PLocketApp extends StatelessWidget {
   const PLocketApp({super.key});
 
+  static const bool _useCloud = bool.fromEnvironment('USE_CLOUD', defaultValue: false);
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -31,7 +33,7 @@ class PLocketApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => EventProvider()),
         ChangeNotifierProvider(create: (_) => ProcedureProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
-        ChangeNotifierProvider(create: (_) => CardProvider()),
+        ChangeNotifierProvider(create: (_) => CardProvider(useCloud: _useCloud)),
         ChangeNotifierProxyProvider<CardProvider, AnalyticalFieldProvider>(
           create: (_) => AnalyticalFieldProvider(),
           update: (_, cardProvider, analyticalProvider) {
@@ -44,19 +46,21 @@ class PLocketApp extends StatelessWidget {
         title: 'pLOCKet',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
-        home: Consumer<AuthProvider>(
-          builder: (context, auth, _) {
-            if (auth.status == AuthStatus.unknown) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (auth.isAuthenticated) {
-              return const SplashScreen();
-            }
-            return const LoginScreen();
-          },
-        ),
+        home: _useCloud
+            ? Consumer<AuthProvider>(
+                builder: (context, auth, _) {
+                  if (auth.status == AuthStatus.unknown) {
+                    return const Scaffold(
+                      body: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (auth.isAuthenticated) {
+                    return const SplashScreen();
+                  }
+                  return const LoginScreen();
+                },
+              )
+            : const SplashScreen(),
       ),
     );
   }
