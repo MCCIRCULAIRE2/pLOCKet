@@ -5,12 +5,7 @@
 ALTER TABLE analytical_fields 
   ADD COLUMN entity_type_id UUID REFERENCES entity_types(id);
 
--- Index
-CREATE INDEX idx_analytical_fields_entity_type_id ON analytical_fields(entity_type_id);
-CREATE INDEX idx_analytical_fields_user_name_type ON analytical_fields(user_id, name, entity_type_id) WHERE deleted_at IS NULL;
-
--- Contrainte d'unicité
-ALTER TABLE analytical_fields 
-  ADD CONSTRAINT unique_user_name_type UNIQUE (user_id, name, entity_type_id);
+-- NOTE : La contrainte UNIQUE et les index seront créés dans 007b
+-- pour gérer correctement le cas entity_type_id IS NULL
 
 COMMENT ON TABLE analytical_fields IS 'Définition centralisée des types d''attributs';
