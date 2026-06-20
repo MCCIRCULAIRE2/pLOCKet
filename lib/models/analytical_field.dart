@@ -2,31 +2,75 @@ import 'dart:convert';
 
 class AnalyticalField {
   final String id;
+  final String userId;
   final String name;
-  final String? icon;
+  final String? category;
+  final String? entityTypeId;
+  final bool isSensitive;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
 
   AnalyticalField({
     required this.id,
+    required this.userId,
     required this.name,
-    this.icon,
+    this.category,
+    this.entityTypeId,
+    this.isSensitive = false,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    DateTime? updatedAt,
+    this.deletedAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
         'id': id,
+        'user_id': userId,
         'name': name,
-        'icon': icon,
-        'createdAt': createdAt.toIso8601String(),
+        'category': category,
+        'entity_type_id': entityTypeId,
+        'is_sensitive': isSensitive,
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+        'deleted_at': deletedAt?.toIso8601String(),
       };
 
   factory AnalyticalField.fromMap(Map<String, dynamic> map) => AnalyticalField(
         id: map['id'] as String,
+        userId: map['user_id'] as String,
         name: map['name'] as String,
-        icon: map['icon'] as String?,
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
+        category: map['category'] as String?,
+        entityTypeId: map['entity_type_id'] as String?,
+        isSensitive: map['is_sensitive'] as bool? ?? false,
+        createdAt: map['created_at'] != null
+            ? DateTime.parse(map['created_at'] as String)
             : null,
+        updatedAt: map['updated_at'] != null
+            ? DateTime.parse(map['updated_at'] as String)
+            : null,
+        deletedAt: map['deleted_at'] != null
+            ? DateTime.parse(map['deleted_at'] as String)
+            : null,
+      );
+
+  AnalyticalField copyWith({
+    String? name,
+    String? category,
+    String? entityTypeId,
+    bool? isSensitive,
+    DateTime? deletedAt,
+  }) =>
+      AnalyticalField(
+        id: id,
+        userId: userId,
+        name: name ?? this.name,
+        category: category ?? this.category,
+        entityTypeId: entityTypeId ?? this.entityTypeId,
+        isSensitive: isSensitive ?? this.isSensitive,
+        createdAt: createdAt,
+        updatedAt: DateTime.now(),
+        deletedAt: deletedAt ?? this.deletedAt,
       );
 }
 
