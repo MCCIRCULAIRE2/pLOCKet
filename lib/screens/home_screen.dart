@@ -16,6 +16,7 @@ import 'manual_entry_screen.dart';
 import 'search_results_screen.dart';
 import 'card_detail_screen.dart';
 import 'settings_screen.dart';
+import 'personal_vault_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -112,6 +113,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void _submitSearch(String query) {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
+
+    final queryLower = trimmed.toLowerCase();
+    if (queryLower == 'qui suis-je' || queryLower == "c'est qui moi") {
+      _searchController.clear();
+      _searchFocus.unfocus();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const PersonalVaultScreen(),
+        ),
+      );
+      return;
+    }
 
     context.read<SearchProvider>().search(trimmed);
     _searchController.clear();

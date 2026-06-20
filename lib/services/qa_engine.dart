@@ -144,12 +144,12 @@ class QaEngine {
       case 'adresse':
         return profile.adressePostale;
       case 'telephone':
-        return profile.telephone;
+        return profile.phone;
       case 'email':
         return profile.email;
       case 'date_naissance':
-        if (profile.dateNaissance != null) {
-          return '${profile.dateNaissance!.day}/${profile.dateNaissance!.month}/${profile.dateNaissance!.year}';
+        if (profile.birthDate != null) {
+          return '${profile.birthDate!.day}/${profile.birthDate!.month}/${profile.birthDate!.year}';
         }
         return null;
       default:

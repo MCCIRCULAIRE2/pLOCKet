@@ -144,12 +144,12 @@ class SemanticRelationEngine {
   }
 
   static String? _getUserName(UserProfile profile) {
-    if (profile.prenom != null && profile.nom != null) {
-      return '${profile.prenom} ${profile.nom}';
-    } else if (profile.prenom != null) {
-      return profile.prenom;
-    } else if (profile.nom != null) {
-      return profile.nom;
+    if (profile.firstName != null && profile.lastName != null) {
+      return '${profile.firstName} ${profile.lastName}';
+    } else if (profile.firstName != null) {
+      return profile.firstName;
+    } else if (profile.lastName != null) {
+      return profile.lastName;
     }
     return null;
   }
@@ -158,7 +158,7 @@ class SemanticRelationEngine {
   static AnalyticalField? _findFieldByName(String name, List<AnalyticalField> fields) {
     return fields.firstWhere(
       (f) => f.name.toLowerCase() == name.toLowerCase(),
-      orElse: () => AnalyticalField(id: '', name: ''),
+      orElse: () => AnalyticalField(id: '', userId: '', name: ''),
     );
   }
 

@@ -5,11 +5,16 @@ import 'providers/card_provider.dart';
 import 'providers/document_provider.dart';
 import 'providers/tag_provider.dart';
 import 'providers/entity_provider.dart';
+import 'providers/entity_type_provider.dart';
+import 'providers/relation_type_provider.dart';
+import 'providers/entity_attribute_provider.dart';
+import 'providers/relation_provider.dart';
 import 'providers/event_provider.dart';
 import 'providers/procedure_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/analytical_field_provider.dart';
 import 'providers/user_profile_provider.dart';
+import 'providers/onboarding_provider.dart';
 import 'services/update_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -26,7 +31,16 @@ class PLocketApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => UpdateService()),
+        ChangeNotifierProvider(create: (_) => EntityTypeProvider()),
+        ChangeNotifierProvider(create: (_) => RelationTypeProvider()),
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),
+        ChangeNotifierProxyProvider<UserProfileProvider, OnboardingProvider>(
+          create: (_) => OnboardingProvider(),
+          update: (_, userProfileProvider, onboardingProvider) {
+            onboardingProvider!.updateProfile(userProfileProvider.profile);
+            return onboardingProvider;
+          },
+        ),
         ChangeNotifierProvider(create: (_) => DocumentProvider()),
         ChangeNotifierProvider(create: (_) => TagProvider()),
         ChangeNotifierProvider(create: (_) => EntityProvider()),
@@ -41,6 +55,8 @@ class PLocketApp extends StatelessWidget {
             return analyticalProvider;
           },
         ),
+        ChangeNotifierProvider(create: (_) => EntityAttributeProvider()),
+        ChangeNotifierProvider(create: (_) => RelationProvider()),
       ],
       child: MaterialApp(
         title: 'pLOCKet',

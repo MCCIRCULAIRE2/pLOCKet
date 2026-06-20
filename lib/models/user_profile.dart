@@ -1,5 +1,6 @@
 class UserProfile {
   final String userId;
+  final String? primaryPersonEntityId;
   final String? firstName;
   final String? lastName;
   final String? phone;
@@ -7,9 +8,9 @@ class UserProfile {
   final bool onboardingCompleted;
   final DateTime createdAt;
   final DateTime updatedAt;
-  
+
   // Anciennes colonnes conservées pour migration applicative
-  // Seront supprimées après migration 012
+  // Seront supprimées après migration 013
   final String? email;
   final String? adressePostale;
   final String? numeroSecuriteSociale;
@@ -18,6 +19,7 @@ class UserProfile {
 
   UserProfile({
     required this.userId,
+    this.primaryPersonEntityId,
     this.firstName,
     this.lastName,
     this.phone,
@@ -35,6 +37,7 @@ class UserProfile {
 
   Map<String, dynamic> toMap() => {
         'user_id': userId,
+        'primary_person_entity_id': primaryPersonEntityId,
         'first_name': firstName,
         'last_name': lastName,
         'phone': phone,
@@ -52,6 +55,7 @@ class UserProfile {
 
   factory UserProfile.fromMap(Map<String, dynamic> map) => UserProfile(
         userId: map['user_id'] as String,
+        primaryPersonEntityId: map['primary_person_entity_id'] as String?,
         firstName: map['first_name'] as String?,
         lastName: map['last_name'] as String?,
         phone: map['phone'] as String?,
@@ -74,6 +78,7 @@ class UserProfile {
       );
 
   UserProfile copyWith({
+    String? primaryPersonEntityId,
     String? firstName,
     String? lastName,
     String? phone,
@@ -82,6 +87,7 @@ class UserProfile {
   }) =>
       UserProfile(
         userId: userId,
+        primaryPersonEntityId: primaryPersonEntityId ?? this.primaryPersonEntityId,
         firstName: firstName ?? this.firstName,
         lastName: lastName ?? this.lastName,
         phone: phone ?? this.phone,

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/card_provider.dart';
+import '../providers/user_profile_provider.dart';
 import '../services/data_migration_service.dart';
 import 'home_screen.dart';
+import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -67,14 +69,35 @@ class _SplashScreenState extends State<SplashScreen>
     await _glowController.forward();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fadeController.forward();
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, _, _) => const HomeScreen(),
-          transitionDuration: Duration.zero,
-        ),
-      );
+
+    if (!mounted) return;
+
+    final useCloud = context.read<CardProvider>().useCloud;
+
+    if (useCloud) {
+      await context.read<UserProfileProvider>().loadProfile();
+      if (!mounted) return;
+
+      final profile = context.read<UserProfileProvider>().profile;
+      final onboardingDone = profile?.onboardingCompleted ?? false;
+
+      if (!onboardingDone) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) => const OnboardingScreen(),
+            transitionDuration: Duration.zero,
+          ),
+        );
+        return;
+      }
     }
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => const HomeScreen(),
+        transitionDuration: Duration.zero,
+      ),
+    );
   }
 
   void _runMigrationIfCloud() {

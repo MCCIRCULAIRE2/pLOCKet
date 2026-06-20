@@ -979,6 +979,7 @@ class CloudRepository {
     try {
       await _client.from('user_profiles').upsert({
         'user_id': _userId,
+        'primary_person_entity_id': profile.primaryPersonEntityId,
         'first_name': profile.firstName,
         'last_name': profile.lastName,
         'phone': profile.phone,

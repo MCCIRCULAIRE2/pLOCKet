@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/analytical_field.dart';
 import '../models/card_model.dart';
+import '../services/cloud_repository.dart';
 import '../database/daos/analytical_field_dao.dart';
 import '../ai/semantic_relation_engine.dart';
 import 'card_provider.dart';
 
 class AnalyticalFieldProvider extends ChangeNotifier {
+  final CloudRepository _cloudRepo = CloudRepository();
   final AnalyticalFieldDao _dao = AnalyticalFieldDao();
   final Uuid _uuid = const Uuid();
   CardProvider? _cardProvider;
@@ -35,25 +37,25 @@ class AnalyticalFieldProvider extends ChangeNotifier {
     debugPrint('[SETTINGS LOAD] ═══════════════════════════════════════════════════════════');
     debugPrint('[SETTINGS LOAD] Début chargement des référentiels analytiques');
     debugPrint('[SETTINGS LOAD] ═══════════════════════════════════════════════════════════');
-    
+
     _isLoading = true;
     _error = null;
     notifyListeners();
-    
+
     try {
-      debugPrint('[SETTINGS LOAD] Chargement des champs analytiques...');
-      _fields = await _dao.getAllFields();
+      debugPrint('[SETTINGS LOAD] Chargement des champs analytiques (Cloud)...');
+      _fields = await _cloudRepo.getAllAnalyticalFields();
       debugPrint('[SETTINGS LOAD] ✓ ${_fields.length} champ(s) chargé(s)');
-      
-      debugPrint('[SETTINGS LOAD] Chargement des valeurs analytiques...');
+
+      debugPrint('[SETTINGS LOAD] Chargement des valeurs analytiques (local)...');
       _allValues = await _dao.getAllValues();
       debugPrint('[SETTINGS LOAD] ✓ ${_allValues.length} valeur(s) chargée(s)');
-      
+
       _valuesByField = {};
       for (final v in _allValues) {
         _valuesByField.putIfAbsent(v.fieldId, () => []).add(v);
       }
-      
+
       debugPrint('[SETTINGS LOAD] ═══════════════════════════════════════════════════════════');
       debugPrint('[SETTINGS LOAD] ✓ Chargement terminé avec succès');
       debugPrint('[SETTINGS LOAD] ═══════════════════════════════════════════════════════════');
@@ -65,27 +67,39 @@ class AnalyticalFieldProvider extends ChangeNotifier {
       debugPrint('[SETTINGS LOAD] ═══════════════════════════════════════════════════════════');
       _error = 'Erreur chargement champs analytiques: $e';
     }
-    
+
     _isLoading = false;
     notifyListeners();
   }
 
-  Future<AnalyticalField> createField({required String name, String? icon}) async {
-    final field = AnalyticalField(id: _uuid.v4(), name: name, icon: icon);
-    await _dao.insertField(field);
+  Future<AnalyticalField> createField({
+    required String name,
+    String? icon,
+    String? category,
+    String? entityTypeId,
+    bool isSensitive = false,
+  }) async {
+    final field = AnalyticalField(
+      id: _uuid.v4(),
+      userId: '',
+      name: name,
+      category: category,
+      entityTypeId: entityTypeId,
+      isSensitive: isSensitive,
+    );
+    await _cloudRepo.insertAnalyticalField(field);
     await loadAll();
     return field;
   }
 
   Future<void> renameField(AnalyticalField field, String newName) async {
-    final updated = AnalyticalField(
-        id: field.id, name: newName, icon: field.icon, createdAt: field.createdAt);
-    await _dao.updateField(updated);
+    final updated = field.copyWith(name: newName);
+    await _cloudRepo.updateAnalyticalField(updated);
     await loadAll();
   }
 
   Future<void> deleteField(String fieldId) async {
-    await _dao.deleteField(fieldId);
+    await _cloudRepo.deleteAnalyticalField(fieldId);
     await loadAll();
   }
 
@@ -115,8 +129,7 @@ class AnalyticalFieldProvider extends ChangeNotifier {
 
   Future<void> updateValue(AnalyticalValue value) async {
     await _dao.updateValue(value);
-    
-    // Si les alias ont changé, mettre à jour les fiches
+
     if (_cardProvider != null) {
       await _cardProvider!.updateCardsWithAnalyticalValue(
         fieldName: _getFieldNameById(value.fieldId),
@@ -124,7 +137,7 @@ class AnalyticalFieldProvider extends ChangeNotifier {
         newLabel: value.label,
       );
     }
-    
+
     await loadAll();
   }
 
@@ -234,14 +247,13 @@ class AnalyticalFieldProvider extends ChangeNotifier {
   Future<void> renameValue(AnalyticalValue value, String newLabel) async {
     final oldLabel = value.label;
     final fieldName = _getFieldNameById(value.fieldId);
-    
+
     debugPrint('[ANALYTICAL] ═══════════════════════════════════════════════════════════');
     debugPrint('[ANALYTICAL] Renommage valeur: "$oldLabel" → "$newLabel"');
     debugPrint('[ANALYTICAL] Champ: $fieldName');
-    
+
     await _dao.updateValue(value.copyWith(label: newLabel));
-    
-    // Mettre à jour toutes les fiches qui utilisent cette valeur
+
     if (_cardProvider != null) {
       await _cardProvider!.updateCardsWithAnalyticalValue(
         fieldName: fieldName,
@@ -249,7 +261,7 @@ class AnalyticalFieldProvider extends ChangeNotifier {
         newLabel: newLabel,
       );
     }
-    
+
     await loadAll();
     debugPrint('[ANALYTICAL] ✓ Renommage terminé');
     debugPrint('[ANALYTICAL] ═══════════════════════════════════════════════════════════');
@@ -258,7 +270,7 @@ class AnalyticalFieldProvider extends ChangeNotifier {
   String _getFieldNameById(String fieldId) {
     final field = _fields.firstWhere(
       (f) => f.id == fieldId,
-      orElse: () => AnalyticalField(id: fieldId, name: 'unknown'),
+      orElse: () => AnalyticalField(id: fieldId, userId: '', name: 'unknown'),
     );
     return field.name;
   }
@@ -266,11 +278,11 @@ class AnalyticalFieldProvider extends ChangeNotifier {
   List<AnalyticalValueMatch> findMatches(String text) {
     final matches = <AnalyticalValueMatch>[];
     final textLower = text.toLowerCase();
-    
+
     print('[ENTITY] ═══════════════════════════════════════════════════════════');
     print('[ENTITY] Détection automatique d\'entités dans le texte');
     print('[ENTITY] ═══════════════════════════════════════════════════════════');
-    
+
     for (final value in _allValues) {
       final field = _fields.where((f) => f.id == value.fieldId).firstOrNull;
       if (field == null) continue;
@@ -327,25 +339,24 @@ class AnalyticalFieldProvider extends ChangeNotifier {
       }
     }
     matches.sort((a, b) => b.confidence.compareTo(a.confidence));
-    
+
     print('[ENTITY] ═══════════════════════════════════════════════════════════');
     print('[ENTITY] ${matches.length} entité(s) détectée(s)');
     for (final m in matches) {
       print('[ENTITY]   ${m.field.name} = ${m.value.label} (${m.confidence}%)');
     }
     print('[ENTITY] ═══════════════════════════════════════════════════════════');
-    
+
     return matches;
   }
 
   Map<String, String> detectIdentifiers(String text) {
     final identifiers = <String, String>{};
-    
+
     print('[IDENTIFIER] ═══════════════════════════════════════════════════════════');
     print('[IDENTIFIER] Détection d\'identifiants dans le texte');
     print('[IDENTIFIER] ═══════════════════════════════════════════════════════════');
-    
-    // Numéro de sécurité sociale français (13 chiffres + clé 2 chiffres)
+
     final ssRegex = RegExp(r'\b([12]\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2})\b');
     final ssMatch = ssRegex.firstMatch(text);
     if (ssMatch != null) {
@@ -353,38 +364,35 @@ class AnalyticalFieldProvider extends ChangeNotifier {
       identifiers['numero_securite_sociale'] = ssNumber;
       print('[IDENTIFIER] ✓ Numéro SS détecté: $ssNumber');
     }
-    
-    // Numéro de permis (format variable, souvent 12 chiffres)
+
     final permisRegex = RegExp(r'\b(\d{12})\b');
     final permisMatch = permisRegex.firstMatch(text);
     if (permisMatch != null && !identifiers.containsKey('numero_securite_sociale')) {
       identifiers['numero_permis'] = permisMatch.group(1)!;
       print('[IDENTIFIER] ✓ Numéro permis détecté: ${permisMatch.group(1)}');
     }
-    
-    // Numéro de contrat (patterns courants)
+
     final contratRegex = RegExp(r'(?:contrat|n°|numéro)\s*[:#]?\s*(\w{5,20})', caseSensitive: false);
     final contratMatch = contratRegex.firstMatch(text);
     if (contratMatch != null) {
       identifiers['numero_contrat'] = contratMatch.group(1)!;
       print('[IDENTIFIER] ✓ Numéro contrat détecté: ${contratMatch.group(1)}');
     }
-    
-    // Numéro de client
+
     final clientRegex = RegExp(r'(?:client|adhérent)\s*[:#]?\s*(\w{5,20})', caseSensitive: false);
     final clientMatch = clientRegex.firstMatch(text);
     if (clientMatch != null) {
       identifiers['numero_client'] = clientMatch.group(1)!;
       print('[IDENTIFIER] ✓ Numéro client détecté: ${clientMatch.group(1)}');
     }
-    
+
     print('[IDENTIFIER] ═══════════════════════════════════════════════════════════');
     print('[IDENTIFIER] ${identifiers.length} identifiant(s) détecté(s)');
     for (final entry in identifiers.entries) {
       print('[IDENTIFIER]   ${entry.key} = ${entry.value}');
     }
     print('[IDENTIFIER] ═══════════════════════════════════════════════════════════');
-    
+
     return identifiers;
   }
 }

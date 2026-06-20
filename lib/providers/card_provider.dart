@@ -10,10 +10,18 @@ import '../ai/fallback_ai_service.dart';
 import '../ai/contextual_suggestion_engine.dart';
 import '../services/content_pipeline.dart';
 import '../services/qa_engine.dart';
+import '../services/qa_engine_v2.dart';
 import '../services/cloud_repository.dart';
 import '../database/daos/card_dao.dart';
 import '../database/daos/document_dao.dart';
 import '../models/document.dart';
+import 'entity_provider.dart';
+import 'entity_attribute_provider.dart';
+import 'analytical_field_provider.dart';
+import 'entity_type_provider.dart';
+import 'relation_type_provider.dart';
+import 'relation_provider.dart';
+import 'user_profile_provider.dart';
 
 
 class CardProvider extends ChangeNotifier {
@@ -23,12 +31,54 @@ class CardProvider extends ChangeNotifier {
   final bool useCloud;
   late final ContentPipeline _pipeline;
   late final QaEngine _qa;
+  final QaEngineV2 _qaV2 = QaEngineV2();
   final Uuid _uuid = Uuid();
+
+  // V2 providers (optional — progressive migration)
+  EntityProvider? _entityProvider;
+  EntityAttributeProvider? _entityAttrProvider;
+  AnalyticalFieldProvider? _analyticalFieldProvider;
+  EntityTypeProvider? _entityTypeProvider;
+  RelationTypeProvider? _relationTypeProvider;
+  RelationProvider? _relationProvider;
+  UserProfileProvider? _userProfileProvider;
+
+  // V2 report counters
+  int _v2AnswerCount = 0;
+  int _v2FallbackCount = 0;
+  final List<Map<String, String>> _v2FallbackLog = [];
 
   CardProvider({AIService? ai, this.useCloud = false}) {
     final service = ai ?? FallbackAIService();
     _pipeline = ContentPipeline(ai: service);
     _qa = QaEngine(ai: service);
+  }
+
+  void setV2Providers({
+    required EntityProvider entityProvider,
+    required EntityAttributeProvider entityAttributeProvider,
+    required AnalyticalFieldProvider analyticalFieldProvider,
+    required EntityTypeProvider entityTypeProvider,
+    required RelationTypeProvider relationTypeProvider,
+    required RelationProvider relationProvider,
+    required UserProfileProvider userProfileProvider,
+  }) {
+    _entityProvider = entityProvider;
+    _entityAttrProvider = entityAttributeProvider;
+    _analyticalFieldProvider = analyticalFieldProvider;
+    _entityTypeProvider = entityTypeProvider;
+    _relationTypeProvider = relationTypeProvider;
+    _relationProvider = relationProvider;
+    _userProfileProvider = userProfileProvider;
+  }
+
+  Map<String, dynamic> get v2Report {
+    return {
+      'questionsV2': _v2AnswerCount,
+      'fallbacksToLegacy': _v2FallbackCount,
+      'totalQuestions': _v2AnswerCount + _v2FallbackCount,
+      'fallbackDetails': List.from(_v2FallbackLog),
+    };
   }
 
   List<CardModel> _cards = [];
@@ -502,6 +552,46 @@ class CardProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    // Stage 1 : QaEngineV2 (prioritaire)
+    if (_entityProvider != null) {
+      try {
+        final v2Result = await _qaV2.answer(
+          question: question,
+          entityProvider: _entityProvider!,
+          attrProvider: _entityAttrProvider!,
+          fieldProvider: _analyticalFieldProvider!,
+          entityTypeProvider: _entityTypeProvider!,
+          relationTypeProvider: _relationTypeProvider!,
+          relationProvider: _relationProvider!,
+          userProfileProvider: _userProfileProvider!,
+          cardProvider: this,
+        );
+
+        if (v2Result.confidence != 'Faible') {
+          _v2AnswerCount++;
+          _lastAnswer = v2Result;
+          _isAnswering = false;
+          notifyListeners();
+          return _lastAnswer!;
+        }
+
+        _v2FallbackCount++;
+        _v2FallbackLog.add({
+          'question': question,
+          'reason': 'V2 confidence Faible',
+          'v2Answer': v2Result.answerText,
+        });
+      } catch (e) {
+        _v2FallbackCount++;
+        _v2FallbackLog.add({
+          'question': question,
+          'reason': 'V2 exception: $e',
+          'v2Answer': '',
+        });
+      }
+    }
+
+    // Stage 2 : Fallback QaEngine legacy
     try {
       _lastAnswer = await _qa.answer(question);
     } catch (e) {

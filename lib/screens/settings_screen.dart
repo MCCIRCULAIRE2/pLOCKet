@@ -10,7 +10,7 @@ import '../widgets/glass_card.dart';
 import '../widgets/adaptive_dialog.dart';
 import 'ocr_comparison_test.dart';
 import 'debug_storage_screen.dart';
-import 'user_profile_screen.dart';
+import 'personal_vault_screen.dart' hide GlassSectionHeader;
 import 'analytical_value_detail_screen.dart';
 import 'ocr_debug_screen.dart';
 import 'package:image_picker/image_picker.dart';
@@ -130,14 +130,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               : 'Profil configuré'
                           : 'Configurer mon profil'),
                       subtitle: Text(hasProfile 
-                          ? 'Modifier mes informations personnelles'
-                          : 'Nom, email, téléphone, adresse...'),
+                          ? 'Gérer mes entités, relations et attributs'
+                          : 'Configurer mon profil puis gérer mes données'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const UserProfileScreen(),
+                            builder: (_) => const PersonalVaultScreen(),
                           ),
                         );
                       },
@@ -555,7 +555,7 @@ class _ValueChip extends StatelessWidget {
     final usageCount = provider.countCardUsage(value);
     final field = provider.fields.firstWhere(
       (f) => f.id == fieldId,
-      orElse: () => AnalyticalField(id: fieldId, name: ''),
+      orElse: () => AnalyticalField(id: fieldId, userId: '', name: ''),
     );
 
     return GestureDetector(
